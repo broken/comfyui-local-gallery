@@ -7,7 +7,8 @@ const state = {
     isScanning: false,
     
     // Filters
-    searchQuery: '',
+    searchQuery: '', // Global search box
+    filenameQuery: '', // Dedicated filename box
     selectedModel: '',
     selectedLora: ''
 };
@@ -16,6 +17,7 @@ const state = {
 const els = {
     btnSelect: document.getElementById('select-folder-btn'),
     searchInput: document.getElementById('search-input'),
+    filenameFilter: document.getElementById('filename-filter'),
     modelFilter: document.getElementById('model-filter'),
     loraFilter: document.getElementById('lora-filter'),
     galleryGrid: document.getElementById('gallery-grid'),
@@ -38,6 +40,7 @@ const els = {
 function init() {
     els.btnSelect.addEventListener('click', handleFolderSelection);
     els.searchInput.addEventListener('input', handleFilterChange);
+    els.filenameFilter.addEventListener('input', handleFilterChange);
     els.modelFilter.addEventListener('change', handleFilterChange);
     els.loraFilter.addEventListener('change', handleFilterChange);
     els.btnCloseModal.addEventListener('click', closeModal);
@@ -64,40 +67,76 @@ function extractComfyUIMetadata(jsonStr) {
         const data = JSON.parse(jsonStr);
         result.raw = data;
 
-        // The prompt JSON in ComfyUI has node IDs as keys, and node specs as values
-        // Let's iterate over nodes
-        const nodes = Object.values(data);
+        // Determine if it's workflow (has .nodes array) or prompt (nodes are top level object values)
+        let nodes = [];
+        if (data.nodes && Array.isArray(data.nodes)) {
+            nodes = data.nodes;
+        } else {
+            nodes = Object.values(data);
+        }
         
         let positiveText = [];
 
         nodes.forEach(node => {
-            if (!node.class_type) return;
+            if (!node || typeof node !== 'object') return;
+            
+            const classType = node.class_type || node.type || '';
+            const title = (node._meta && node._meta.title) || node.title || '';
+            
+            if (!classType) return;
+
+            // Helper to get widgets
+            const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
 
             // Extract Base Model
-            if (node.class_type === 'CheckpointLoaderSimple' || node.class_type.includes('Checkpoint')) {
+            if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
                     result.model = node.inputs.ckpt_name;
+                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
+                    result.model = wValues[0];
+                }
+            } else if (classType.includes('Model Cycler') || title.includes('Model Cycler')) {
+                if (Array.isArray(wValues)) {
+                    wValues.forEach(wv => {
+                        if (wv && typeof wv === 'object' && wv.current_model_name) {
+                            result.model = wv.current_model_name;
+                        }
+                    });
+                } else if (node.inputs && node.inputs.current_model_name) {
+                    result.model = node.inputs.current_model_name;
                 }
             }
 
             // Extract LoRAs
-            if (node.class_type === 'LoraLoader' || node.class_type === 'LoraLoaderModelOnly') {
+            if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
                     result.loras.push(node.inputs.lora_name);
+                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
+                    result.loras.push(wValues[0]);
+                }
+            } else if (classType.includes('Lora Cycler') || title.includes('Lora Cycler')) {
+                if (Array.isArray(wValues)) {
+                    wValues.forEach(wv => {
+                        if (wv && typeof wv === 'object' && wv.current_lora_name) {
+                            result.loras.push(wv.current_lora_name);
+                        }
+                    });
+                } else if (node.inputs && node.inputs.current_lora_name) {
+                    result.loras.push(node.inputs.current_lora_name);
                 }
             }
 
             // Extract Prompts (heuristics: looking for CLIPTextEncode)
-            if (node.class_type === 'CLIPTextEncode') {
+            if (classType === 'CLIPTextEncode') {
                 if (node.inputs && typeof node.inputs.text === 'string') {
-                    // Usually there's positive and negative. Heuristic: positive is often the larger one or connected to specific inputs
                     positiveText.push(node.inputs.text);
+                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
+                    positiveText.push(wValues[0]);
                 }
             }
         });
 
         if (positiveText.length > 0) {
-            // Just join them for display, or pick the first one
             result.positivePrompt = positiveText.join('\n\n--- Also found ---\n');
         } else {
             result.positivePrompt = "No positive prompt string found (or custom node used).";
@@ -116,7 +155,6 @@ async function parsePNG(file) {
     const defaultData = { name: file.name, model: 'Unknown', loras: [], positivePrompt: 'No metadata found', raw: null };
     
     try {
-        // Lightweight chunk parser
         const arrayBuffer = await file.arrayBuffer();
         const dataView = new DataView(arrayBuffer);
         
@@ -126,6 +164,10 @@ async function parsePNG(file) {
         }
 
         let offset = 8;
+        let promptMetadata = null;
+        let workflowMetadata = null;
+        let rawJson = {};
+
         while (offset < arrayBuffer.byteLength) {
             const length = dataView.getUint32(offset);
             const type = String.fromCharCode(
@@ -135,15 +177,11 @@ async function parsePNG(file) {
                 dataView.getUint8(offset + 7)
             );
             
-            // If we hit IDAT (image data), ComfyUI metadata is usually before it. 
             if (type === 'tEXt' || type === 'iTXt') {
-                // Read the chunk data
                 const chunkDataView = new Uint8Array(arrayBuffer, offset + 8, length);
-                const decoder = new TextDecoder('utf-8'); // mostly ascii/utf-8
+                const decoder = new TextDecoder('utf-8'); 
                 
-                // tEXt chunk formatting: Keyword (null separator) Text string
                 if (type === 'tEXt') {
-                    // Find null byte
                     let nullIdx = 0;
                     for (let i = 0; i < chunkDataView.length; i++) {
                         if (chunkDataView[i] === 0) {
@@ -154,17 +192,43 @@ async function parsePNG(file) {
                     const keyword = decoder.decode(chunkDataView.subarray(0, nullIdx));
                     const textStr = decoder.decode(chunkDataView.subarray(nullIdx + 1));
                     
-                    if (keyword === 'prompt' || keyword === 'workflow') {
-                        // Usually 'prompt' has the actual gen data we want based on Comfy execution
-                        return { ...defaultData, ...extractComfyUIMetadata(textStr) };
+                    if (keyword === 'prompt') {
+                        promptMetadata = extractComfyUIMetadata(textStr);
+                        try { rawJson.prompt = JSON.parse(textStr); } catch(e){}
+                    } else if (keyword === 'workflow') {
+                        workflowMetadata = extractComfyUIMetadata(textStr);
+                        try { rawJson.workflow = JSON.parse(textStr); } catch(e){}
                     }
                 }
             } else if (type === 'IEND') {
                 break;
             }
-            
-            // offset + length + type(4) + length(4) + crc(4)
             offset += 12 + length;
+        }
+
+        if (promptMetadata || workflowMetadata) {
+            const merged = { ...defaultData };
+            
+            const getBest = (key, defaultVal) => {
+                let vP = promptMetadata ? promptMetadata[key] : null;
+                let vW = workflowMetadata ? workflowMetadata[key] : null;
+                
+                if (key === 'loras') {
+                    const combined = new Set([...(vP || []), ...(vW || [])]);
+                    return Array.from(combined);
+                }
+                
+                if (vP && vP !== defaultVal) return vP;
+                if (vW && vW !== defaultVal) return vW;
+                return defaultVal;
+            };
+
+            merged.model = getBest('model', 'Unknown');
+            merged.loras = getBest('loras', []);
+            merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
+            merged.raw = rawJson;
+            
+            return merged;
         }
         
     } catch (e) {
@@ -204,6 +268,7 @@ async function handleFolderSelection() {
         
         // Enable controls
         els.searchInput.disabled = false;
+        els.filenameFilter.disabled = false;
         els.modelFilter.disabled = false;
         els.loraFilter.disabled = false;
         els.btnSelect.disabled = false;
@@ -293,14 +358,19 @@ function updateFiltersUI() {
 
 function handleFilterChange() {
     state.searchQuery = els.searchInput.value.toLowerCase();
+    state.filenameQuery = els.filenameFilter.value.toLowerCase();
     state.selectedModel = els.modelFilter.value;
     state.selectedLora = els.loraFilter.value;
     
     state.filteredImages = state.images.filter(img => {
-        // Search Filter
-        const matchesSearch = img.data.name.toLowerCase().includes(state.searchQuery) ||
+        // Global Search Filter
+        const matchesSearch = !state.searchQuery || 
+                              img.data.name.toLowerCase().includes(state.searchQuery) ||
                               img.data.model.toLowerCase().includes(state.searchQuery) ||
                               img.data.loras.some(l => l.toLowerCase().includes(state.searchQuery));
+                              
+        // Specific Filename Filter
+        const matchesFilename = !state.filenameQuery || img.data.name.toLowerCase().includes(state.filenameQuery);
                               
         // Model Filter (exact match on full path inside state)
         const matchesModel = !state.selectedModel || img.data.model === state.selectedModel;
@@ -308,7 +378,7 @@ function handleFilterChange() {
         // LoRA Filter
         const matchesLora = !state.selectedLora || img.data.loras.includes(state.selectedLora);
         
-        return matchesSearch && matchesModel && matchesLora;
+        return matchesSearch && matchesFilename && matchesModel && matchesLora;
     });
     
     renderGallery();
