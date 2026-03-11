@@ -30,6 +30,7 @@ const els = {
     sortFilter: document.getElementById('sort-filter'),
     autoUpdateCb: document.getElementById('auto-update-cb'),
     galleryGrid: document.getElementById('gallery-grid'),
+    resultsCount: document.getElementById('results-count'),
     loadingSpinner: document.getElementById('loading-spinner'),
     statusText: document.getElementById('status-text'),
     
@@ -609,6 +610,14 @@ function handleFilterChange() {
 
 function renderGallery() {
     els.galleryGrid.innerHTML = '';
+    
+    // Update results count
+    if (state.images.length > 0) {
+        els.resultsCount.style.display = 'block';
+        els.resultsCount.textContent = `${state.filteredImages.length} result${state.filteredImages.length !== 1 ? 's' : ''}`;
+    } else {
+        els.resultsCount.style.display = 'none';
+    }
     
     if (state.filteredImages.length === 0) {
         els.galleryGrid.innerHTML = `
