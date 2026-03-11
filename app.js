@@ -168,7 +168,7 @@ function extractComfyUIMetadata(jsonStr) {
             const lowerTitle = title.toLowerCase();
 
             // Extract Base Model
-            if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint')) {
+            if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint') || lowerTitle === 'ckpt' || lowerTitle.includes('ckpt')) {
                 // User specifies only looking in widget_values
                 if (wValues && Array.isArray(wValues)) {
                     // Flatten since it may be an array of arrays
@@ -188,25 +188,27 @@ function extractComfyUIMetadata(jsonStr) {
 
             // Extract LoRAs
             if (lowerTitle === 'lora stack' || lowerTitle.includes('lora stack')) {
-                // User specifies only looking in widget_values which is an array of arrays
                 if (wValues && Array.isArray(wValues)) {
-                    wValues.forEach(wv => {
-                        // If it's an array of array of values
-                        if (Array.isArray(wv) && wv.length > 0 && typeof wv[0] === 'string') {
-                            const loraName = wv[0].trim();
-                            // Ignore placeholders
-                            if (loraName && loraName.toLowerCase() !== 'none') {
-                                customLoras.push(loraName);
+                    const traverse = (item) => {
+                        if (Array.isArray(item)) {
+                            // If the first element is a string and looks like a Lora path
+                            if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
+                               (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
+                                customLoras.push(item[0].trim());
+                            } else {
+                                // Otherwise, search recursively into this array
+                                item.forEach(traverse);
                             }
-                        } else if (typeof wv === 'string' && wv.includes('.safetensors')) {
-                            // Fallback if the array actually contains string values directly
-                            const parts = wv.split(',');
+                        } else if (typeof item === 'string' && item.includes('.safetensors')) {
+                            // Fallback for strings containing comma-separated formats
+                            const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
                                 customLoras.push(loraName);
                             }
                         }
-                    });
+                    };
+                    traverse(wValues);
                 }
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
