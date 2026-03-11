@@ -162,38 +162,46 @@ function extractComfyUIMetadata(jsonStr) {
             // Helper to get widgets
             const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
 
-            // Extract Base Model
-            if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
+            // Extract using specific Node Titles
+            const lowerTitle = title.toLowerCase();
+
+            // 1) "checkpoint" node
+            if (lowerTitle === 'checkpoint' || classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
+                // Check if there is a known checkpoint name input
                 if (node.inputs && node.inputs.ckpt_name) {
                     result.model = node.inputs.ckpt_name;
-                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    result.model = wValues[0];
+                } 
+                // Alternatively, find the first string in widgets
+                else if (wValues && Array.isArray(wValues)) {
+                    const strVal = wValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
+                    if (strVal) result.model = strVal;
                 }
             }
 
-            // Extract LoRAs
-            if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
+            // 2) "lora stack" node
+            if (lowerTitle === 'lora stack') {
+                if (wValues && Array.isArray(wValues)) {
+                    // Usually the lora stack data is a single large string connected to a text widget
+                    const textVal = wValues.find(v => typeof v === 'string' && v.includes('.safetensors'));
+                    if (textVal) {
+                        const lines = textVal.split('\n');
+                        lines.forEach(line => {
+                            if (!line.trim()) return;
+                            // Format is: "LoraPath.safetensors,lora_value,model_value"
+                            const parts = line.split(',');
+                            if (parts.length > 0 && parts[0].trim()) {
+                                result.loras.push(parts[0].trim());
+                            }
+                        });
+                    }
+                }
+            } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
+                // Keep the standard built-in Lora loader just in case
                 if (node.inputs && node.inputs.lora_name) {
                     result.loras.push(node.inputs.lora_name);
                 } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
                     result.loras.push(wValues[0]);
                 }
-            }
-            
-            // Generic fallback for custom nodes using .safetensors path rules per user request
-            if (Array.isArray(wValues)) {
-                wValues.forEach(wv => {
-                    if (typeof wv === 'string' && wv.endsWith('.safetensors')) {
-                        // "if there is two backslashes consecutively, it is a lora"
-                        if (wv.includes('\\\\')) {
-                            result.loras.push(wv);
-                        } 
-                        // "If it has a slash in it, it is a model"
-                        else if (wv.includes('/')) {
-                            result.model = wv;
-                        }
-                    }
-                });
             }
 
             // Extract Prompts (heuristics: looking for CLIPTextEncode)
