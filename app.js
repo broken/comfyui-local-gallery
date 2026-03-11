@@ -361,8 +361,7 @@ async function processDirectory(dirHandle) {
     
     // Populate UI
     updateFiltersUI();
-    state.filteredImages = [...state.images];
-    renderGallery();
+    handleFilterChange();
     
     // Enable controls
     els.searchInput.disabled = false;
