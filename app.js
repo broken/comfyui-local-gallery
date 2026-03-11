@@ -28,6 +28,7 @@ const els = {
     modelFilter: document.getElementById('model-filter'),
     loraFilter: document.getElementById('lora-filter'),
     sortFilter: document.getElementById('sort-filter'),
+    autoUpdateCb: document.getElementById('auto-update-cb'),
     galleryGrid: document.getElementById('gallery-grid'),
     loadingSpinner: document.getElementById('loading-spinner'),
     statusText: document.getElementById('status-text'),
@@ -91,6 +92,7 @@ async function init() {
     els.modelFilter.addEventListener('change', handleFilterChange);
     els.loraFilter.addEventListener('change', handleFilterChange);
     els.sortFilter.addEventListener('change', handleFilterChange);
+    els.autoUpdateCb.addEventListener('change', toggleAutoUpdate);
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnCloseModal.addEventListener('click', closeModal);
     
@@ -372,6 +374,7 @@ async function processDirectory(dirHandle) {
     els.modelFilter.disabled = false;
     els.loraFilter.disabled = false;
     els.sortFilter.disabled = false;
+    els.autoUpdateCb.disabled = false;
     els.btnSelect.disabled = false;
     
     // Restore default button text in case it was the "Re-open" button
@@ -383,8 +386,25 @@ async function processDirectory(dirHandle) {
     els.statusText.textContent = `Loaded ${state.images.length} images from ${dirHandle.name}.`;
     els.loadingSpinner.classList.add('hidden');
     
-    // Start background watcher (poll every 15 seconds to minimize resource usage)
-    state.watchInterval = setInterval(checkDirectoryForChanges, 15000);
+    // Start background watcher if enabled
+    if (els.autoUpdateCb.checked) {
+        state.watchInterval = setInterval(checkDirectoryForChanges, 15000);
+    }
+}
+
+function toggleAutoUpdate() {
+    if (els.autoUpdateCb.checked) {
+        if (!state.watchInterval && state.currentDirHandle) {
+            state.watchInterval = setInterval(checkDirectoryForChanges, 15000);
+            els.statusText.textContent = "Auto-update enabled (15s).";
+        }
+    } else {
+        if (state.watchInterval) {
+            clearInterval(state.watchInterval);
+            state.watchInterval = null;
+            els.statusText.textContent = "Auto-update disabled.";
+        }
+    }
 }
 
 // Background poller for auto-updates
