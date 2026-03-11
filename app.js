@@ -159,7 +159,7 @@ function extractComfyUIMetadata(jsonStr) {
             if (!node || typeof node !== 'object') return;
             
             const classType = node.class_type || node.type || '';
-            const title = (node._meta && node._meta.title) || node.title || '';
+            const title = node.title || '';
             
             if (!classType) return;
 
@@ -171,44 +171,50 @@ function extractComfyUIMetadata(jsonStr) {
             if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint')) {
                 // User specifies only looking in widget_values
                 if (wValues && Array.isArray(wValues)) {
-                    const strVal = wValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
+                    // Flatten since it may be an array of arrays
+                    const flatValues = wValues.flat(Infinity);
+                    const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
                     if (strVal) customModel = strVal;
                 }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
                     standardModel = node.inputs.ckpt_name;
-                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    standardModel = wValues[0];
+                } else if (wValues && Array.isArray(wValues)) {
+                    const flatValues = wValues.flat(Infinity);
+                    const strVal = flatValues.find(v => typeof v === 'string');
+                    if (strVal) standardModel = strVal;
                 }
             }
 
             // Extract LoRAs
             if (lowerTitle === 'lora stack' || lowerTitle.includes('lora stack')) {
-                const allStrings = [];
-                // User specifies only looking in widget_values
+                // User specifies only looking in widget_values which is an array of arrays
                 if (wValues && Array.isArray(wValues)) {
-                    allStrings.push(...wValues.filter(v => typeof v === 'string'));
-                }
-
-                allStrings.forEach(strVal => {
-                    const lines = strVal.split('\n');
-                    lines.forEach(line => {
-                        if (!line.trim()) return;
-                        if (!line.includes(',')) return; // Requires commas based on format
-                        
-                        const parts = line.split(',');
-                        const loraName = parts[0].trim();
-                        // Ignore placeholders
-                        if (loraName && loraName.toLowerCase() !== 'none') {
-                            customLoras.push(loraName);
+                    wValues.forEach(wv => {
+                        // If it's an array of array of values
+                        if (Array.isArray(wv) && wv.length > 0 && typeof wv[0] === 'string') {
+                            const loraName = wv[0].trim();
+                            // Ignore placeholders
+                            if (loraName && loraName.toLowerCase() !== 'none') {
+                                customLoras.push(loraName);
+                            }
+                        } else if (typeof wv === 'string' && wv.includes('.safetensors')) {
+                            // Fallback if the array actually contains string values directly
+                            const parts = wv.split(',');
+                            const loraName = parts[0].trim();
+                            if (loraName && loraName.toLowerCase() !== 'none') {
+                                customLoras.push(loraName);
+                            }
                         }
                     });
-                });
+                }
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
                     standardLoras.push(node.inputs.lora_name);
-                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    standardLoras.push(wValues[0]);
+                } else if (wValues && Array.isArray(wValues)) {
+                    const flatValues = wValues.flat(Infinity);
+                    const strVal = flatValues.find(v => typeof v === 'string');
+                    if (strVal) standardLoras.push(strVal);
                 }
             }
 
