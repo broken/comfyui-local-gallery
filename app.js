@@ -150,6 +150,10 @@ function extractComfyUIMetadata(jsonStr) {
         }
         
         let positiveText = [];
+        let standardModel = 'Unknown';
+        let customModel = null;
+        let standardLoras = [];
+        let customLoras = [];
 
         nodes.forEach(node => {
             if (!node || typeof node !== 'object') return;
@@ -161,46 +165,55 @@ function extractComfyUIMetadata(jsonStr) {
 
             // Helper to get widgets
             const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
-
-            // Extract using specific Node Titles
             const lowerTitle = title.toLowerCase();
 
-            // 1) "checkpoint" node
-            if (lowerTitle === 'checkpoint' || classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
-                // Check if there is a known checkpoint name input
+            // Extract Base Model
+            if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
-                    result.model = node.inputs.ckpt_name;
-                } 
-                // Alternatively, find the first string in widgets
-                else if (wValues && Array.isArray(wValues)) {
+                    customModel = node.inputs.ckpt_name;
+                } else if (wValues && Array.isArray(wValues)) {
                     const strVal = wValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
-                    if (strVal) result.model = strVal;
+                    if (strVal) customModel = strVal;
+                }
+            } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
+                if (node.inputs && node.inputs.ckpt_name) {
+                    standardModel = node.inputs.ckpt_name;
+                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
+                    standardModel = wValues[0];
                 }
             }
 
-            // 2) "lora stack" node
-            if (lowerTitle === 'lora stack') {
-                if (wValues && Array.isArray(wValues)) {
-                    // Usually the lora stack data is a single large string connected to a text widget
-                    const textVal = wValues.find(v => typeof v === 'string' && v.includes('.safetensors'));
-                    if (textVal) {
-                        const lines = textVal.split('\n');
-                        lines.forEach(line => {
-                            if (!line.trim()) return;
-                            // Format is: "LoraPath.safetensors,lora_value,model_value"
-                            const parts = line.split(',');
-                            if (parts.length > 0 && parts[0].trim()) {
-                                result.loras.push(parts[0].trim());
-                            }
-                        });
-                    }
+            // Extract LoRAs
+            if (lowerTitle === 'lora stack' || lowerTitle.includes('lora stack')) {
+                const allStrings = [];
+                if (Array.isArray(wValues)) {
+                    allStrings.push(...wValues.filter(v => typeof v === 'string'));
                 }
+                if (node.inputs) {
+                    Object.values(node.inputs).forEach(v => {
+                        if (typeof v === 'string') allStrings.push(v);
+                    });
+                }
+
+                allStrings.forEach(strVal => {
+                    const lines = strVal.split('\n');
+                    lines.forEach(line => {
+                        if (!line.trim()) return;
+                        if (!line.includes(',')) return; // Requires commas based on format
+                        
+                        const parts = line.split(',');
+                        const loraName = parts[0].trim();
+                        // Ignore placeholders
+                        if (loraName && loraName.toLowerCase() !== 'none') {
+                            customLoras.push(loraName);
+                        }
+                    });
+                });
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
-                // Keep the standard built-in Lora loader just in case
                 if (node.inputs && node.inputs.lora_name) {
-                    result.loras.push(node.inputs.lora_name);
+                    standardLoras.push(node.inputs.lora_name);
                 } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    result.loras.push(wValues[0]);
+                    standardLoras.push(wValues[0]);
                 }
             }
 
@@ -213,6 +226,10 @@ function extractComfyUIMetadata(jsonStr) {
                 }
             }
         });
+
+        // Resolve Overrides
+        result.model = customModel || standardModel;
+        result.loras = customLoras.length > 0 ? customLoras : standardLoras;
 
         if (positiveText.length > 0) {
             result.positivePrompt = positiveText.join('\n\n--- Also found ---\n');
