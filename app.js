@@ -450,8 +450,8 @@ async function processBatch(filesBatch) {
 }
 
 function updateFiltersUI() {
-    // Models
-    const models = Array.from(state.models).sort();
+    // Models (case-insensitive alphabetical sort)
+    const models = Array.from(state.models).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     els.modelFilter.innerHTML = '<option value="">All Models</option>';
     models.forEach(model => {
         const option = document.createElement('option');
@@ -461,8 +461,8 @@ function updateFiltersUI() {
         els.modelFilter.appendChild(option);
     });
 
-    // LoRAs
-    const loras = Array.from(state.loras).sort();
+    // LoRAs (case-insensitive alphabetical sort)
+    const loras = Array.from(state.loras).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     els.loraFilter.innerHTML = '<option value="">All LoRAs</option>';
     loras.forEach(lora => {
         const option = document.createElement('option');
