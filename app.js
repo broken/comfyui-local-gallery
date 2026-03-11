@@ -634,9 +634,12 @@ function renderGallery() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.2A2 2 0 0 1 18.2 18H5.8A2 2 0 0 1 4 16.2V7.8A2 2 0 0 1 5.8 6h12.4a2 2 0 0 1 1.8 1.8v8.4z"></path><polyline points="10 11 12 13 14 11"></polyline></svg>
                     ${shortModelName}
                 </div>
-                ${img.data.loras.length > 0 ? `<div class="card-model">
+                ${img.data.loras.length === 1 ? `<div class="card-model" title="${img.data.loras[0]}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    ${img.data.loras.length} LoRA(s)
+                    ${img.data.loras[0].length > 25 ? img.data.loras[0].substring(0, 25) + '...' : img.data.loras[0]}
+                </div>` : img.data.loras.length > 1 ? `<div class="card-model">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    ${img.data.loras.length} LoRAs
                 </div>` : ''}
             </div>
         `;
