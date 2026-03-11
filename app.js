@@ -169,9 +169,8 @@ function extractComfyUIMetadata(jsonStr) {
 
             // Extract Base Model
             if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint')) {
-                if (node.inputs && node.inputs.ckpt_name) {
-                    customModel = node.inputs.ckpt_name;
-                } else if (wValues && Array.isArray(wValues)) {
+                // User specifies only looking in widget_values
+                if (wValues && Array.isArray(wValues)) {
                     const strVal = wValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
                     if (strVal) customModel = strVal;
                 }
@@ -186,13 +185,9 @@ function extractComfyUIMetadata(jsonStr) {
             // Extract LoRAs
             if (lowerTitle === 'lora stack' || lowerTitle.includes('lora stack')) {
                 const allStrings = [];
-                if (Array.isArray(wValues)) {
+                // User specifies only looking in widget_values
+                if (wValues && Array.isArray(wValues)) {
                     allStrings.push(...wValues.filter(v => typeof v === 'string'));
-                }
-                if (node.inputs) {
-                    Object.values(node.inputs).forEach(v => {
-                        if (typeof v === 'string') allStrings.push(v);
-                    });
                 }
 
                 allStrings.forEach(strVal => {
