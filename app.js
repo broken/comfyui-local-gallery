@@ -537,6 +537,10 @@ async function processBatch(filesBatch, silent = false) {
 
 function updateFiltersUI() {
     const getDisplayName = (pathStr) => pathStr.includes('/') ? pathStr.split('/').pop() : (pathStr.includes('\\') ? pathStr.split('\\').pop() : pathStr);
+    
+    // Save current selections
+    const currentModel = els.modelFilter.value;
+    const currentLora = els.loraFilter.value;
 
     // Models (case-insensitive alphabetical sort by display name)
     const models = Array.from(state.models).sort((a, b) => {
@@ -551,6 +555,9 @@ function updateFiltersUI() {
         option.textContent = getDisplayName(model);
         els.modelFilter.appendChild(option);
     });
+    
+    // Restore model if still exists
+    if (models.includes(currentModel)) els.modelFilter.value = currentModel;
 
     // LoRAs (case-insensitive alphabetical sort by display name)
     const loras = Array.from(state.loras).sort((a, b) => {
@@ -563,6 +570,9 @@ function updateFiltersUI() {
         option.textContent = getDisplayName(lora); // Show just filename if path exists
         els.loraFilter.appendChild(option);
     });
+    
+    // Restore Lora if still exists
+    if (loras.includes(currentLora)) els.loraFilter.value = currentLora;
 }
 
 function handleFilterChange() {
