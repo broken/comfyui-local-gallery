@@ -535,24 +535,31 @@ async function processBatch(filesBatch, silent = false) {
 }
 
 function updateFiltersUI() {
-    // Models (case-insensitive alphabetical sort)
-    const models = Array.from(state.models).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    const getDisplayName = (pathStr) => pathStr.includes('/') ? pathStr.split('/').pop() : (pathStr.includes('\\') ? pathStr.split('\\').pop() : pathStr);
+
+    // Models (case-insensitive alphabetical sort by display name)
+    const models = Array.from(state.models).sort((a, b) => {
+        return getDisplayName(a).toLowerCase().localeCompare(getDisplayName(b).toLowerCase());
+    });
+    
     els.modelFilter.innerHTML = '<option value="">All Models</option>';
     models.forEach(model => {
         const option = document.createElement('option');
         option.value = model;
         // Show just the filename if it's a path
-        option.textContent = model.includes('/') ? model.split('/').pop() : (model.includes('\\') ? model.split('\\').pop() : model);
+        option.textContent = getDisplayName(model);
         els.modelFilter.appendChild(option);
     });
 
-    // LoRAs (case-insensitive alphabetical sort)
-    const loras = Array.from(state.loras).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    // LoRAs (case-insensitive alphabetical sort by display name)
+    const loras = Array.from(state.loras).sort((a, b) => {
+        return getDisplayName(a).toLowerCase().localeCompare(getDisplayName(b).toLowerCase());
+    });
     els.loraFilter.innerHTML = '<option value="">All LoRAs</option>';
     loras.forEach(lora => {
         const option = document.createElement('option');
         option.value = lora;
-        option.textContent = lora;
+        option.textContent = getDisplayName(lora); // Show just filename if path exists
         els.loraFilter.appendChild(option);
     });
 }
