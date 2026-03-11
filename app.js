@@ -99,6 +99,8 @@ async function init() {
     // Close modal on escape or clicking backdrop
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeModal();
+        if (e.key === 'ArrowLeft') navigateImage(-1);
+        if (e.key === 'ArrowRight') navigateImage(1);
     });
     els.modal.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) closeModal();
@@ -690,6 +692,19 @@ function closeModal() {
     state.currentActiveImg = null;
     // Note: Intentionally not clearing els.modalImage.src to prevent flicker on rapid close/open,
     // though we could to free up memory if users view many very large images. URL.createObjectURL manages memory fine on its own mostly.
+}
+
+function navigateImage(direction) {
+    if (els.modal.classList.contains('hidden') || !state.currentActiveImg || state.filteredImages.length === 0) return;
+    
+    const currentIndex = state.filteredImages.findIndex(img => img === state.currentActiveImg);
+    if (currentIndex === -1) return;
+    
+    let nextIndex = currentIndex + direction;
+    if (nextIndex < 0) nextIndex = state.filteredImages.length - 1;
+    if (nextIndex >= state.filteredImages.length) nextIndex = 0;
+    
+    openImageModal(state.filteredImages[nextIndex]);
 }
 
 async function deleteImage() {
