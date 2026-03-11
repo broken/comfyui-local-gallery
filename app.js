@@ -169,16 +169,6 @@ function extractComfyUIMetadata(jsonStr) {
                 } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
                     result.model = wValues[0];
                 }
-            } else if (classType.includes('Model Cycler') || title.includes('Model Cycler')) {
-                if (Array.isArray(wValues)) {
-                    wValues.forEach(wv => {
-                        if (wv && typeof wv === 'object' && wv.current_model_name) {
-                            result.model = wv.current_model_name;
-                        }
-                    });
-                } else if (node.inputs && node.inputs.current_model_name) {
-                    result.model = node.inputs.current_model_name;
-                }
             }
 
             // Extract LoRAs
@@ -188,16 +178,22 @@ function extractComfyUIMetadata(jsonStr) {
                 } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
                     result.loras.push(wValues[0]);
                 }
-            } else if (classType.includes('Lora Cycler') || title.includes('Lora Cycler')) {
-                if (Array.isArray(wValues)) {
-                    wValues.forEach(wv => {
-                        if (wv && typeof wv === 'object' && wv.current_lora_name) {
-                            result.loras.push(wv.current_lora_name);
+            }
+            
+            // Generic fallback for custom nodes using .safetensors path rules per user request
+            if (Array.isArray(wValues)) {
+                wValues.forEach(wv => {
+                    if (typeof wv === 'string' && wv.endsWith('.safetensors')) {
+                        // "if there is two backslashes consecutively, it is a lora"
+                        if (wv.includes('\\\\')) {
+                            result.loras.push(wv);
+                        } 
+                        // "If it has a slash in it, it is a model"
+                        else if (wv.includes('/')) {
+                            result.model = wv;
                         }
-                    });
-                } else if (node.inputs && node.inputs.current_lora_name) {
-                    result.loras.push(node.inputs.current_lora_name);
-                }
+                    }
+                });
             }
 
             // Extract Prompts (heuristics: looking for CLIPTextEncode)
