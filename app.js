@@ -36,8 +36,46 @@ const els = {
     modalPromptBadge: document.getElementById('modal-prompt-badge')
 };
 
+// --- IDB Storage for Folder Caching ---
+const dbName = 'ComfyUIGalleryDB';
+const storeName = 'handles';
+
+async function initDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName, 1);
+        request.onupgradeneeded = (e) => {
+            e.target.result.createObjectStore(storeName);
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async function saveHandle(handle) {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const req = store.put(handle, 'lastDirectory');
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function loadHandle() {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.get('lastDirectory');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+// ------------------------------------
+
 // Initialization
-function init() {
+async function init() {
     els.btnSelect.addEventListener('click', handleFolderSelection);
     els.searchInput.addEventListener('input', handleFilterChange);
     els.filenameFilter.addEventListener('input', handleFilterChange);
@@ -52,6 +90,42 @@ function init() {
     els.modal.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) closeModal();
     });
+    
+    // Attempt Auto-load
+    try {
+        const cachedHandle = await loadHandle();
+        if (cachedHandle) {
+            // Verify permission
+            const permission = await cachedHandle.queryPermission({ mode: 'read' });
+            if (permission === 'granted') {
+                els.statusText.textContent = "Automatically reusing cached folder...";
+                await processDirectory(cachedHandle);
+            } else {
+                // If permission dropped (e.g. browser restart), we can ask for it when they click the button, 
+                // but let's change the button text to make it easy
+                els.btnSelect.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Re-open ${cachedHandle.name}`;
+                els.statusText.textContent = `Click to re-authorize access to '${cachedHandle.name}'`;
+                
+                // Override click handler for this specific situation
+                const oldBtn = els.btnSelect;
+                const newBtn = oldBtn.cloneNode(true);
+                oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+                els.btnSelect = newBtn;
+                
+                els.btnSelect.addEventListener('click', async () => {
+                    const reqPerm = await cachedHandle.requestPermission({ mode: 'read' });
+                    if (reqPerm === 'granted') {
+                        // Reset button
+                        els.btnSelect.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Select Folder`;
+                        els.btnSelect.addEventListener('click', handleFolderSelection);
+                        await processDirectory(cachedHandle);
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        console.warn("Could not load cached directory handle", e);
+    }
 }
 
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
@@ -238,53 +312,64 @@ async function parsePNG(file) {
     return defaultData;
 }
 
+async function processDirectory(dirHandle) {
+    els.btnSelect.disabled = true;
+    els.loadingSpinner.classList.remove('hidden');
+    els.galleryGrid.innerHTML = '';
+    
+    // Clear state
+    state.images = [];
+    state.models.clear();
+    state.loras.clear();
+    
+    // Scan directory
+    await scanDirectory(dirHandle);
+    
+    // Populate UI
+    updateFiltersUI();
+    state.filteredImages = [...state.images];
+    renderGallery();
+    
+    // Enable controls
+    els.searchInput.disabled = false;
+    els.filenameFilter.disabled = false;
+    els.modelFilter.disabled = false;
+    els.loraFilter.disabled = false;
+    els.btnSelect.disabled = false;
+    
+    // Restore default button text in case it was the "Re-open" button
+    els.btnSelect.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Select Folder`;
+    // Ensure the main listener is attached
+    els.btnSelect.removeEventListener('click', handleFolderSelection);
+    els.btnSelect.addEventListener('click', handleFolderSelection);
+    
+    els.statusText.textContent = `Loaded ${state.images.length} images from ${dirHandle.name}.`;
+    els.loadingSpinner.classList.add('hidden');
+}
+
 async function handleFolderSelection() {
     try {
-        // Unfortunately standard web permissions don't allow setting an absolute default path 
-        // with the File System Access API due to security. We use 'id' to remember the last choice.
         const dirHandle = await window.showDirectoryPicker({
             id: 'comfyui-gallery', 
             mode: 'read',
-            startIn: 'pictures' // We can only give generic hints like 'pictures' or 'documents'
+            startIn: 'pictures' 
         });
         
         els.statusText.textContent = `Scanning directory: ${dirHandle.name}...`;
-        els.btnSelect.disabled = true;
-        els.loadingSpinner.classList.remove('hidden');
-        els.galleryGrid.innerHTML = '';
         
-        // Clear state
-        state.images = [];
-        state.models.clear();
-        state.loras.clear();
+        // Save for next reload
+        await saveHandle(dirHandle);
         
-        // Scan directory
-        await scanDirectory(dirHandle);
-        
-        // Populate UI
-        updateFiltersUI();
-        state.filteredImages = [...state.images];
-        renderGallery();
-        
-        // Enable controls
-        els.searchInput.disabled = false;
-        els.filenameFilter.disabled = false;
-        els.modelFilter.disabled = false;
-        els.loraFilter.disabled = false;
-        els.btnSelect.disabled = false;
-        
-        els.statusText.textContent = `Loaded ${state.images.length} images from ${dirHandle.name}.`;
+        await processDirectory(dirHandle);
         
     } catch (err) {
         console.error(err);
         if (err.name !== 'AbortError') {
             els.statusText.textContent = `Error: ${err.message}. Please select a valid folder.`;
         } else {
-            els.statusText.textContent = 'Folder selection cancelled. (Hint: Select D:\\ai\\...\\output)';
+            els.statusText.textContent = 'Folder selection cancelled.';
         }
         els.btnSelect.disabled = false;
-    } finally {
-        els.loadingSpinner.classList.add('hidden');
     }
 }
 
