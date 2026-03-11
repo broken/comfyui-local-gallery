@@ -15,7 +15,9 @@ const state = {
     
     // Directory Management
     currentDirHandle: null,
-    currentActiveImg: null
+    currentActiveImg: null,
+    watchInterval: null,
+    isChecking: false
 };
 
 // DOM Elements
@@ -354,6 +356,7 @@ async function processDirectory(dirHandle) {
     state.images = [];
     state.models.clear();
     state.loras.clear();
+    if (state.watchInterval) clearInterval(state.watchInterval);
     
     // Scan directory
     state.currentDirHandle = dirHandle;
@@ -379,6 +382,62 @@ async function processDirectory(dirHandle) {
     
     els.statusText.textContent = `Loaded ${state.images.length} images from ${dirHandle.name}.`;
     els.loadingSpinner.classList.add('hidden');
+    
+    // Start background watcher (poll every 15 seconds to minimize resource usage)
+    state.watchInterval = setInterval(checkDirectoryForChanges, 15000);
+}
+
+// Background poller for auto-updates
+async function checkDirectoryForChanges() {
+    if (!state.currentDirHandle || state.isChecking) return;
+    state.isChecking = true;
+    
+    try {
+        const currentFileNames = new Set(state.images.map(img => img.data.name));
+        let newFiles = [];
+        let foundNames = new Set();
+        
+        for await (const entry of state.currentDirHandle.values()) {
+            if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.png')) {
+                foundNames.add(entry.name);
+                if (!currentFileNames.has(entry.name)) {
+                    const file = await entry.getFile();
+                    newFiles.push(file);
+                }
+            }
+        }
+        
+        let changed = false;
+        
+        // Handle deletions outside of the app
+        const deletedNames = [...currentFileNames].filter(name => !foundNames.has(name));
+        if (deletedNames.length > 0) {
+            state.images = state.images.filter(img => !deletedNames.includes(img.data.name));
+            changed = true;
+        }
+        
+        // Handle additions
+        if (newFiles.length > 0) {
+            await processBatch(newFiles, true); 
+            changed = true;
+        }
+        
+        if (changed) {
+            updateFiltersUI();
+            handleFilterChange();
+            els.statusText.textContent = `Auto-updated. Loaded ${state.images.length} images from ${state.currentDirHandle.name}.`;
+        }
+    } catch (err) {
+        // Handle permission loss gracefully (e.g., folder moved or browser revoked read access)
+        console.warn("Background watcher lost permission or error:", err);
+        if (state.watchInterval) {
+            clearInterval(state.watchInterval);
+            state.watchInterval = null;
+        }
+        els.statusText.textContent = "Auto-update paused. Click 'Select Folder' to reconnect.";
+    } finally {
+        state.isChecking = false;
+    }
 }
 
 async function handleFolderSelection() {
@@ -429,7 +488,7 @@ async function scanDirectory(dirHandle) {
     }
 }
 
-async function processBatch(filesBatch) {
+async function processBatch(filesBatch, silent = false) {
     const parsePromises = filesBatch.map(async file => {
         const url = URL.createObjectURL(file);
         const metadata = await parsePNG(file);
@@ -450,7 +509,7 @@ async function processBatch(filesBatch) {
     
     const results = await Promise.all(parsePromises);
     state.images.push(...results);
-    els.statusText.textContent = `Found ${state.images.length} images... please wait...`;
+    if (!silent) els.statusText.textContent = `Found ${state.images.length} images... please wait...`;
 }
 
 function updateFiltersUI() {
