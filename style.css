@@ -168,7 +168,7 @@ button {
 
 select, .filter-input {
     appearance: none;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.85); /* Darkened for better readability */
     border: 1px solid var(--glass-border);
     color: var(--text-primary);
     padding: 0.4rem 0.8rem;
