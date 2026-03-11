@@ -471,7 +471,7 @@ main {
     border-right: none;
     border-bottom: none;
     border-radius: 0;
-    padding: 2rem;
+    padding: 4rem 2rem 2rem 2rem;
     overflow-y: auto;
     background: rgba(20, 23, 28, 0.9);
 }
