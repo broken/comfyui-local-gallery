@@ -10,7 +10,11 @@ const state = {
     searchQuery: '', // Global search box
     filenameQuery: '', // Dedicated filename box
     selectedModel: '',
-    selectedLora: ''
+    selectedLora: '',
+    
+    // Directory Management
+    currentDirHandle: null,
+    currentActiveImg: null
 };
 
 // DOM Elements
@@ -33,7 +37,8 @@ const els = {
     modalLoras: document.getElementById('modal-loras'),
     modalPositive: document.getElementById('modal-positive'),
     modalRawJson: document.getElementById('modal-raw-json'),
-    modalPromptBadge: document.getElementById('modal-prompt-badge')
+    modalPromptBadge: document.getElementById('modal-prompt-badge'),
+    btnDelete: document.getElementById('delete-image-btn')
 };
 
 // --- IDB Storage for Folder Caching ---
@@ -81,6 +86,7 @@ async function init() {
     els.filenameFilter.addEventListener('input', handleFilterChange);
     els.modelFilter.addEventListener('change', handleFilterChange);
     els.loraFilter.addEventListener('change', handleFilterChange);
+    els.btnDelete.addEventListener('click', deleteImage);
     els.btnCloseModal.addEventListener('click', closeModal);
     
     // Close modal on escape or clicking backdrop
@@ -347,6 +353,7 @@ async function processDirectory(dirHandle) {
     state.loras.clear();
     
     // Scan directory
+    state.currentDirHandle = dirHandle;
     await scanDirectory(dirHandle);
     
     // Populate UI
@@ -543,6 +550,7 @@ function renderGallery() {
 }
 
 function openImageModal(img) {
+    state.currentActiveImg = img;
     els.modalImage.src = img.url;
     els.modalFilename.textContent = img.data.name;
     
@@ -578,8 +586,50 @@ function openImageModal(img) {
 
 function closeModal() {
     els.modal.classList.add('hidden');
+    state.currentActiveImg = null;
     // Note: Intentionally not clearing els.modalImage.src to prevent flicker on rapid close/open,
     // though we could to free up memory if users view many very large images. URL.createObjectURL manages memory fine on its own mostly.
+}
+
+async function deleteImage() {
+    if (!state.currentActiveImg || !state.currentDirHandle) return;
+    
+    const confirmDelete = confirm(`Are you sure you want to permanently delete '${state.currentActiveImg.data.name}' from your file system?`);
+    if (!confirmDelete) return;
+    
+    const filename = state.currentActiveImg.data.name;
+    const oldBtnContent = els.btnDelete.innerHTML;
+    els.btnDelete.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>';
+    
+    try {
+        // We first need readwrite permission to delete
+        const permission = await state.currentDirHandle.queryPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+            const reqPerm = await state.currentDirHandle.requestPermission({ mode: 'readwrite' });
+            if (reqPerm !== 'granted') {
+                alert("Write permissions are required to delete files.");
+                els.btnDelete.innerHTML = oldBtnContent;
+                return;
+            }
+        }
+        
+        await state.currentDirHandle.removeEntry(filename);
+        
+        // Remove from memory
+        state.images = state.images.filter(img => img.data.name !== filename);
+        state.filteredImages = state.filteredImages.filter(img => img.data.name !== filename);
+        
+        // Re-render and close
+        renderGallery();
+        closeModal();
+        
+        els.statusText.textContent = `Deleted ${filename}. Loaded ${state.images.length} images.`;
+    } catch (err) {
+        console.error("Failed to delete file:", err);
+        alert(`Failed to delete file: ${err.message}`);
+    } finally {
+        els.btnDelete.innerHTML = oldBtnContent;
+    }
 }
 
 // Boot
