@@ -11,6 +11,7 @@ const state = {
     filenameQuery: '', // Dedicated filename box
     selectedModel: '',
     selectedLora: '',
+    sortBy: 'date-desc', // Default sort
     
     // Directory Management
     currentDirHandle: null,
@@ -24,6 +25,7 @@ const els = {
     filenameFilter: document.getElementById('filename-filter'),
     modelFilter: document.getElementById('model-filter'),
     loraFilter: document.getElementById('lora-filter'),
+    sortFilter: document.getElementById('sort-filter'),
     galleryGrid: document.getElementById('gallery-grid'),
     loadingSpinner: document.getElementById('loading-spinner'),
     statusText: document.getElementById('status-text'),
@@ -86,6 +88,7 @@ async function init() {
     els.filenameFilter.addEventListener('input', handleFilterChange);
     els.modelFilter.addEventListener('change', handleFilterChange);
     els.loraFilter.addEventListener('change', handleFilterChange);
+    els.sortFilter.addEventListener('change', handleFilterChange);
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnCloseModal.addEventListener('click', closeModal);
     
@@ -366,6 +369,7 @@ async function processDirectory(dirHandle) {
     els.filenameFilter.disabled = false;
     els.modelFilter.disabled = false;
     els.loraFilter.disabled = false;
+    els.sortFilter.disabled = false;
     els.btnSelect.disabled = false;
     
     // Restore default button text in case it was the "Re-open" button
@@ -440,6 +444,7 @@ async function processBatch(filesBatch) {
         return {
             file,
             url,
+            lastModified: file.lastModified,
             data: metadata
         };
     });
@@ -477,6 +482,7 @@ function handleFilterChange() {
     state.filenameQuery = els.filenameFilter.value.toLowerCase();
     state.selectedModel = els.modelFilter.value;
     state.selectedLora = els.loraFilter.value;
+    state.sortBy = els.sortFilter.value;
     
     state.filteredImages = state.images.filter(img => {
         // Global Search Filter
@@ -495,6 +501,20 @@ function handleFilterChange() {
         const matchesLora = !state.selectedLora || img.data.loras.includes(state.selectedLora);
         
         return matchesSearch && matchesFilename && matchesModel && matchesLora;
+    });
+    
+    // Apply Sorting
+    state.filteredImages.sort((a, b) => {
+        if (state.sortBy === 'date-desc') {
+            return b.lastModified - a.lastModified;
+        } else if (state.sortBy === 'date-asc') {
+            return a.lastModified - b.lastModified;
+        } else if (state.sortBy === 'name-asc') {
+            return a.data.name.localeCompare(b.data.name);
+        } else if (state.sortBy === 'name-desc') {
+            return b.data.name.localeCompare(a.data.name);
+        }
+        return 0;
     });
     
     renderGallery();
