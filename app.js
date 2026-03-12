@@ -578,6 +578,13 @@ function updateFiltersUI() {
         return getDisplayName(a).toLowerCase().localeCompare(getDisplayName(b).toLowerCase());
     });
     els.loraFilter.innerHTML = '<option value="">All LoRAs</option>';
+    
+    // Add "No LoRA" option
+    const noLoraOption = document.createElement('option');
+    noLoraOption.value = '__no_lora__';
+    noLoraOption.textContent = 'No LoRA';
+    els.loraFilter.appendChild(noLoraOption);
+
     loras.forEach(lora => {
         const option = document.createElement('option');
         option.value = lora;
@@ -586,7 +593,7 @@ function updateFiltersUI() {
     });
     
     // Restore Lora if still exists
-    if (loras.includes(currentLora)) els.loraFilter.value = currentLora;
+    if (loras.includes(currentLora) || currentLora === '__no_lora__') els.loraFilter.value = currentLora;
 }
 
 function handleFilterChange() {
@@ -610,7 +617,8 @@ function handleFilterChange() {
         const matchesModel = !state.selectedModel || img.data.model === state.selectedModel;
         
         // LoRA Filter
-        const matchesLora = !state.selectedLora || img.data.loras.includes(state.selectedLora);
+        const matchesLora = !state.selectedLora ? true : 
+                          (state.selectedLora === '__no_lora__' ? img.data.loras.length === 0 : img.data.loras.includes(state.selectedLora));
         
         return matchesSearch && matchesFilename && matchesModel && matchesLora;
     });
