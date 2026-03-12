@@ -192,6 +192,12 @@ function extractComfyUIMetadata(jsonStr) {
                     const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
                     if (strVal) customModel = strVal.replace(/\.safetensors$/i, '');
                 }
+            } else if (classType.includes('Model Cycler')) {
+                // Fallback for Model Cycler
+                if (wValues && Array.isArray(wValues)) {
+                    const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
+                    if (cyclerVal) customModel = cyclerVal.current_model_name.replace(/\.safetensors$/i, '');
+                }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
                     standardModel = node.inputs.ckpt_name.replace(/\.safetensors$/i, '');
@@ -225,6 +231,14 @@ function extractComfyUIMetadata(jsonStr) {
                         }
                     };
                     traverse(wValues);
+                }
+            } else if (classType.includes('Lora Cycler')) {
+                // Fallback for Lora Cycler
+                if (wValues && Array.isArray(wValues)) {
+                    const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
+                    if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
+                        customLoras.push(cyclerVal.current_lora_name.replace(/\.safetensors$/i, ''));
+                    }
                 }
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
