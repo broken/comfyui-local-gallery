@@ -190,21 +190,21 @@ function extractComfyUIMetadata(jsonStr) {
                     // Flatten since it may be an array of arrays
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
-                    if (strVal) customModel = strVal.replace(/\.safetensors$/i, '');
+                    if (strVal) customModel = strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
                 }
             } else if (classType.includes('Model Cycler')) {
                 // Fallback for Model Cycler
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
-                    if (cyclerVal) customModel = cyclerVal.current_model_name.replace(/\.safetensors$/i, '');
+                    if (cyclerVal) customModel = cyclerVal.current_model_name.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
                 }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
-                    standardModel = node.inputs.ckpt_name.replace(/\.safetensors$/i, '');
+                    standardModel = node.inputs.ckpt_name.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
                 } else if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardModel = strVal.replace(/\.safetensors$/i, '');
+                    if (strVal) standardModel = strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
                 }
             }
 
@@ -216,7 +216,7 @@ function extractComfyUIMetadata(jsonStr) {
                             // If the first element is a string and looks like a Lora path
                             if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
                                (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
-                                customLoras.push(item[0].trim().replace(/\.safetensors$/i, ''));
+                                customLoras.push(item[0].trim().replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
                             } else {
                                 // Otherwise, search recursively into this array
                                 item.forEach(traverse);
@@ -226,7 +226,7 @@ function extractComfyUIMetadata(jsonStr) {
                             const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
-                                customLoras.push(loraName.replace(/\.safetensors$/i, ''));
+                                customLoras.push(loraName.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
                             }
                         }
                     };
@@ -237,16 +237,16 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
-                        customLoras.push(cyclerVal.current_lora_name.replace(/\.safetensors$/i, ''));
+                        customLoras.push(cyclerVal.current_lora_name.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
                     }
                 }
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
-                    standardLoras.push(node.inputs.lora_name.replace(/\.safetensors$/i, ''));
+                    standardLoras.push(node.inputs.lora_name.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
                 } else if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardLoras.push(strVal.replace(/\.safetensors$/i, ''));
+                    if (strVal) standardLoras.push(strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
                 }
             }
 
@@ -550,7 +550,7 @@ async function processBatch(filesBatch, silent = false) {
 }
 
 function updateFiltersUI() {
-    const getDisplayName = (pathStr) => pathStr.includes('/') ? pathStr.split('/').pop() : (pathStr.includes('\\') ? pathStr.split('\\').pop() : pathStr);
+    const getDisplayName = (pathStr) => pathStr.includes('/') ? pathStr.split('/').pop() : pathStr;
     
     // Save current selections
     const currentModel = els.modelFilter.value;
@@ -671,7 +671,7 @@ function renderGallery() {
         card.onclick = () => openImageModal(img);
         
         const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : 
-            (img.data.model.includes('/') ? img.data.model.split('/').pop() : (img.data.model.includes('\\') ? img.data.model.split('\\').pop() : img.data.model));
+            (img.data.model.includes('/') ? img.data.model.split('/').pop() : img.data.model);
         
         // Create inner HTML
         card.innerHTML = `
@@ -706,7 +706,7 @@ function openImageModal(img) {
     els.modalFilename.textContent = img.data.name;
     
     const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : 
-        (img.data.model.includes('/') ? img.data.model.split('/').pop() : (img.data.model.includes('\\') ? img.data.model.split('\\').pop() : img.data.model));
+        (img.data.model.includes('/') ? img.data.model.split('/').pop() : img.data.model);
     els.modalModel.textContent = shortModelName;
     
     // Render LoRAs
