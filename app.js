@@ -144,6 +144,12 @@ async function init() {
     }
 }
 
+// Helper to strip paths and extensions from model/lora names
+const normalizeName = (name) => {
+    if (!name || typeof name !== 'string') return name;
+    return name.split(/[/\\]/).pop().replace(/\.safetensors$/i, '');
+};
+
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
 function extractComfyUIMetadata(jsonStr) {
     const result = {
@@ -190,21 +196,21 @@ function extractComfyUIMetadata(jsonStr) {
                     // Flatten since it may be an array of arrays
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
-                    if (strVal) customModel = strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
+                    if (strVal) customModel = normalizeName(strVal);
                 }
             } else if (classType.includes('Model Cycler')) {
                 // Fallback for Model Cycler
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
-                    if (cyclerVal) customModel = cyclerVal.current_model_name.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
+                    if (cyclerVal) customModel = normalizeName(cyclerVal.current_model_name);
                 }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
-                    standardModel = node.inputs.ckpt_name.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
+                    standardModel = normalizeName(node.inputs.ckpt_name);
                 } else if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardModel = strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, '');
+                    if (strVal) standardModel = normalizeName(strVal);
                 }
             }
 
@@ -216,7 +222,7 @@ function extractComfyUIMetadata(jsonStr) {
                             // If the first element is a string and looks like a Lora path
                             if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
                                (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
-                                customLoras.push(item[0].trim().replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
+                                customLoras.push(normalizeName(item[0].trim()));
                             } else {
                                 // Otherwise, search recursively into this array
                                 item.forEach(traverse);
@@ -226,7 +232,7 @@ function extractComfyUIMetadata(jsonStr) {
                             const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
-                                customLoras.push(loraName.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
+                                customLoras.push(normalizeName(loraName));
                             }
                         }
                     };
@@ -237,16 +243,16 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
-                        customLoras.push(cyclerVal.current_lora_name.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
+                        customLoras.push(normalizeName(cyclerVal.current_lora_name));
                     }
                 }
             } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
                 if (node.inputs && node.inputs.lora_name) {
-                    standardLoras.push(node.inputs.lora_name.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
+                    standardLoras.push(normalizeName(node.inputs.lora_name));
                 } else if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardLoras.push(strVal.replace(/\\/g, '/').replace(/\.safetensors$/i, ''));
+                    if (strVal) standardLoras.push(normalizeName(strVal));
                 }
             }
 
@@ -550,33 +556,25 @@ async function processBatch(filesBatch, silent = false) {
 }
 
 function updateFiltersUI() {
-    const getDisplayName = (pathStr) => pathStr.includes('/') ? pathStr.split('/').pop() : pathStr;
-    
     // Save current selections
     const currentModel = els.modelFilter.value;
     const currentLora = els.loraFilter.value;
 
-    // Models (case-insensitive alphabetical sort by display name)
-    const models = Array.from(state.models).sort((a, b) => {
-        return getDisplayName(a).toLowerCase().localeCompare(getDisplayName(b).toLowerCase());
-    });
+    // Models (case-insensitive alphabetical sort)
+    const models = Array.from(state.models).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     
-    els.modelFilter.innerHTML = '<option value="">All Models</option>';
     models.forEach(model => {
         const option = document.createElement('option');
         option.value = model;
-        // Show just the filename if it's a path
-        option.textContent = getDisplayName(model);
+        option.textContent = model;
         els.modelFilter.appendChild(option);
     });
     
     // Restore model if still exists
     if (models.includes(currentModel)) els.modelFilter.value = currentModel;
 
-    // LoRAs (case-insensitive alphabetical sort by display name)
-    const loras = Array.from(state.loras).sort((a, b) => {
-        return getDisplayName(a).toLowerCase().localeCompare(getDisplayName(b).toLowerCase());
-    });
+    // LoRAs (case-insensitive alphabetical sort)
+    const loras = Array.from(state.loras).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     els.loraFilter.innerHTML = '<option value="">All LoRAs</option>';
     
     // Add "No LoRA" option
@@ -588,7 +586,7 @@ function updateFiltersUI() {
     loras.forEach(lora => {
         const option = document.createElement('option');
         option.value = lora;
-        option.textContent = getDisplayName(lora); // Show just filename if path exists
+        option.textContent = lora;
         els.loraFilter.appendChild(option);
     });
     
@@ -670,8 +668,7 @@ function renderGallery() {
         card.className = 'image-card';
         card.onclick = () => openImageModal(img);
         
-        const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : 
-            (img.data.model.includes('/') ? img.data.model.split('/').pop() : img.data.model);
+        const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : img.data.model;
         
         // Create inner HTML
         card.innerHTML = `
@@ -705,8 +702,7 @@ function openImageModal(img) {
     els.modalImage.src = img.url;
     els.modalFilename.textContent = img.data.name;
     
-    const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : 
-        (img.data.model.includes('/') ? img.data.model.split('/').pop() : img.data.model);
+    const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : img.data.model;
     els.modalModel.textContent = shortModelName;
     
     // Render LoRAs
