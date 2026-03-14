@@ -763,8 +763,6 @@ function navigateImage(direction) {
 async function deleteImage() {
     if (!state.currentActiveImg || !state.currentDirHandle) return;
     
-    const confirmDelete = confirm(`Are you sure you want to permanently delete '${state.currentActiveImg.data.name}' from your file system?`);
-    if (!confirmDelete) return;
     
     const filename = state.currentActiveImg.data.name;
     const oldBtnContent = els.btnDelete.innerHTML;
