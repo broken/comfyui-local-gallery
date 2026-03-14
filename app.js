@@ -780,15 +780,24 @@ async function deleteImage() {
             }
         }
         
+        const currentIndex = state.filteredImages.findIndex(img => img === state.currentActiveImg);
+        
         await state.currentDirHandle.removeEntry(filename);
         
         // Remove from memory
         state.images = state.images.filter(img => img.data.name !== filename);
         state.filteredImages = state.filteredImages.filter(img => img.data.name !== filename);
         
-        // Re-render and close
+        // Re-render
         renderGallery();
-        closeModal();
+        
+        // Show next image if available, else close
+        if (state.filteredImages.length > 0) {
+            const nextIndex = Math.min(currentIndex, state.filteredImages.length - 1);
+            openImageModal(state.filteredImages[nextIndex]);
+        } else {
+            closeModal();
+        }
         
         els.statusText.textContent = `Deleted ${filename}. Loaded ${state.images.length} images.`;
     } catch (err) {
