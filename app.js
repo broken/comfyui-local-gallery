@@ -538,7 +538,15 @@ async function processBatch(filesBatch, silent = false) {
         
         // Add to global sets
         if (metadata.model && metadata.model !== 'Unknown') {
-            state.models.add(metadata.model);
+            // Find existing model with same name but maybe different casing
+            const existingModel = Array.from(state.models).find(m => m.toLowerCase() === metadata.model.toLowerCase());
+            if (!existingModel) {
+                state.models.add(metadata.model);
+            } else {
+                // If the new one is "better" (e.g. has more uppercase/standard casing), we could update it
+                // but for now, just keep the first one found to avoid churn.
+                metadata.model = existingModel;
+            }
         }
         metadata.loras.forEach(l => state.loras.add(l));
         
@@ -561,6 +569,7 @@ function updateFiltersUI() {
     const currentLora = els.loraFilter.value;
 
     // Models (case-insensitive alphabetical sort)
+    els.modelFilter.innerHTML = '<option value="">All Models</option>';
     const models = Array.from(state.models).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     
     models.forEach(model => {
