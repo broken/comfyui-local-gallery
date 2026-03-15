@@ -102,6 +102,14 @@ async function init() {
         if (e.key === 'Escape') closeModal();
         if (e.key === 'ArrowLeft') navigateImage(-1);
         if (e.key === 'ArrowRight') navigateImage(1);
+        
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (!els.modal.classList.contains('hidden') && state.currentActiveImg) {
+                e.preventDefault();
+                deleteImage();
+            }
+        }
     });
     els.modal.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) closeModal();
