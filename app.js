@@ -246,13 +246,16 @@ function extractComfyUIMetadata(jsonStr) {
                         customLoras.push(normalizeName(cyclerVal.current_lora_name));
                     }
                 }
-            } else if (classType === 'LoraLoader' || classType === 'LoraLoaderModelOnly') {
-                if (node.inputs && node.inputs.lora_name) {
-                    standardLoras.push(normalizeName(node.inputs.lora_name));
-                } else if (wValues && Array.isArray(wValues)) {
-                    const flatValues = wValues.flat(Infinity);
-                    const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardLoras.push(normalizeName(strVal));
+            }
+            if (classType.includes('Lora Loader')) {
+                if (wValues && Array.isArray(wValues)) {
+                    for (const loras of wValues) {
+                        if (Array.isArray(loras)) {
+                            for (const lora of loras) {
+                                customLoras.push(normalizeName(lora.name));
+                            }
+                        }
+                    }
                 }
             }
 
