@@ -275,6 +275,11 @@ function extractComfyUIMetadata(jsonStr) {
                     positiveText.push(wValues[0]);
                 }
             }
+            if (classType.includes('Positive Prompt')) {
+                if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
+                    positiveText.push(wValues[0]);
+                }
+            }
         });
 
         // Resolve Overrides
