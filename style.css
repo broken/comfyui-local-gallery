@@ -508,6 +508,16 @@ main {
     border: 1px solid rgba(255, 255, 255, 0.02);
 }
 
+.metadata-value.clickable {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.metadata-value.clickable:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-color);
+}
+
 .lora-list {
     display: flex;
     flex-wrap: wrap;
@@ -523,6 +533,17 @@ main {
     border-radius: 12px;
     font-size: 0.8rem;
     white-space: nowrap;
+}
+
+.lora-tag.clickable {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.lora-tag.clickable:hover {
+    background: rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 .scrollable-text {

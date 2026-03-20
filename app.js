@@ -97,6 +97,24 @@ async function init() {
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnCloseModal.addEventListener('click', closeModal);
     
+    // Filter from Modal
+    els.modalModel.addEventListener('click', () => {
+        if (state.currentActiveImg && state.currentActiveImg.data.model !== 'Unknown') {
+            els.modelFilter.value = state.currentActiveImg.data.model;
+            handleFilterChange();
+            closeModal();
+        }
+    });
+
+    els.modalLoras.addEventListener('click', (e) => {
+        const loraTag = e.target.closest('.lora-tag');
+        if (loraTag && !loraTag.classList.contains('empty-state')) {
+            els.loraFilter.value = loraTag.textContent.trim();
+            handleFilterChange();
+            closeModal();
+        }
+    });
+    
     // Close modal on escape or clicking backdrop
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeModal();
@@ -730,11 +748,17 @@ function openImageModal(img) {
     const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : img.data.model;
     els.modalModel.textContent = shortModelName;
     
+    if (img.data.model !== 'Unknown') {
+        els.modalModel.classList.add('clickable');
+    } else {
+        els.modalModel.classList.remove('clickable');
+    }
+    
     // Render LoRAs
     if (img.data.loras.length > 0) {
-        els.modalLoras.innerHTML = img.data.loras.map(l => `<li class="lora-tag">${l}</li>`).join('');
+        els.modalLoras.innerHTML = img.data.loras.map(l => `<li class="lora-tag clickable">${l}</li>`).join('');
     } else {
-        els.modalLoras.innerHTML = '<li style="color:#a0a5b1; font-size:0.9rem;">No LoRAs detected</li>';
+        els.modalLoras.innerHTML = '<li class="lora-tag empty-state" style="color:#a0a5b1; font-size:0.9rem;">No LoRAs detected</li>';
     }
     
     els.modalPositive.textContent = img.data.positivePrompt || 'None';
