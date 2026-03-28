@@ -44,7 +44,8 @@ const els = {
     modalPositive: document.getElementById('modal-positive'),
     modalRawJson: document.getElementById('modal-raw-json'),
     modalPromptBadge: document.getElementById('modal-prompt-badge'),
-    btnDelete: document.getElementById('delete-image-btn')
+    btnDelete: document.getElementById('delete-image-btn'),
+    modalSidebar: document.querySelector('.modal-sidebar')
 };
 
 // --- IDB Storage for Folder Caching ---
@@ -812,7 +813,8 @@ function openImageModal(img) {
     }
     
     // Remove existing cyclers section if any
-    const existingCyclers = els.modalSidebar.querySelector('.cyclers-section');
+    const sidebar = els.modalSidebar || els.modal.querySelector('.modal-sidebar');
+    const existingCyclers = sidebar ? sidebar.querySelector('.cyclers-section') : null;
     if (existingCyclers) existingCyclers.remove();
     
     // Inject before Raw data
