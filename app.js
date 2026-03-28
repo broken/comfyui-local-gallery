@@ -182,6 +182,7 @@ function extractComfyUIMetadata(jsonStr) {
         model: 'Unknown',
         loras: [],
         positivePrompt: '',
+        cyclers: [],
         raw: null
     };
 
@@ -190,11 +191,25 @@ function extractComfyUIMetadata(jsonStr) {
         result.raw = data;
 
         // Determine if it's workflow (has .nodes array) or prompt (nodes are top level object values)
-        let nodes = [];
-        if (data.nodes && Array.isArray(data.nodes)) {
-            nodes = data.nodes;
+        const isWorkflow = !!(data.nodes && Array.isArray(data.nodes));
+        let nodesArray = [];
+        let usedNodeIds = new Set();
+
+        if (isWorkflow) {
+            nodesArray = data.nodes;
         } else {
-            nodes = Object.values(data);
+            // Prompt format: track which nodes are referenced as inputs
+            Object.values(data).forEach(node => {
+                if (node.inputs) {
+                    Object.values(node.inputs).forEach(input => {
+                        if (Array.isArray(input) && input.length >= 2) {
+                            usedNodeIds.add(String(input[0]));
+                        }
+                    });
+                }
+            });
+            // Convert to array and include ID
+            nodesArray = Object.entries(data).map(([id, node]) => ({ ...node, id }));
         }
         
         let positiveText = [];
@@ -203,13 +218,19 @@ function extractComfyUIMetadata(jsonStr) {
         let standardLoras = [];
         let customLoras = [];
 
-        nodes.forEach(node => {
+        nodesArray.forEach(node => {
             if (!node || typeof node !== 'object') return;
             
             const classType = node.class_type || node.type || '';
             const title = node.title || '';
+            const id = node.id;
             
             if (!classType) return;
+
+            // Connectivity check
+            const isHooked = isWorkflow ? 
+                (node.outputs && node.outputs.some(o => o.links && o.links.length > 0)) :
+                usedNodeIds.has(String(id));
 
             // Helper to get widgets
             const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
@@ -228,7 +249,11 @@ function extractComfyUIMetadata(jsonStr) {
                 // Fallback for Model Cycler
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
-                    if (cyclerVal) customModel = normalizeName(cyclerVal.current_model_name);
+                    if (cyclerVal) {
+                        const name = normalizeName(cyclerVal.current_model_name);
+                        result.cyclers.push({ type: 'model', name, hooked: isHooked, title: title || classType });
+                        if (isHooked) customModel = name;
+                    }
                 }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
@@ -269,7 +294,9 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
-                        customLoras.push(normalizeName(cyclerVal.current_lora_name));
+                        const name = normalizeName(cyclerVal.current_lora_name);
+                        result.cyclers.push({ type: 'lora', name, hooked: isHooked, title: title || classType });
+                        if (isHooked) customLoras.push(name);
                     }
                 }
             }
@@ -763,6 +790,34 @@ function openImageModal(img) {
     
     els.modalPositive.textContent = img.data.positivePrompt || 'None';
     
+    // Render Cyclers if any
+    let cyclersHtml = '';
+    if (img.data.cyclers && img.data.cyclers.length > 0) {
+        cyclersHtml = `
+            <div class="metadata-section cyclers-section">
+                <h4>Workflow Cyclers</h4>
+                <ul class="cycler-list">
+                    ${img.data.cyclers.map(c => `
+                        <li class="cycler-item ${c.hooked ? 'active' : 'disconnected'}">
+                            <span class="cycler-status" title="${c.hooked ? 'Connected and used' : 'Disconnected / Not used'}"></span>
+                            <div class="cycler-info">
+                                <span class="cycler-title">${c.title}</span>
+                                <span class="cycler-value">${c.name}</span>
+                            </div>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    // Remove existing cyclers section if any
+    const existingCyclers = els.modalSidebar.querySelector('.cyclers-section');
+    if (existingCyclers) existingCyclers.remove();
+    
+    // Inject before Raw data
+    els.modalRawJson.parentElement.parentElement.insertAdjacentHTML('beforebegin', cyclersHtml);
+
     if (img.data.raw) {
         els.modalRawJson.textContent = JSON.stringify(img.data.raw, null, 2);
     } else {

@@ -644,3 +644,64 @@ details pre {
         flex-wrap: wrap;
     }
 }
+
+/* Cycler Info in Modal */
+.cycler-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.cycler-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.6rem;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cycler-item.active {
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.cycler-item.disconnected {
+    opacity: 0.7;
+    border-style: dashed;
+}
+
+.cycler-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.active .cycler-status {
+    background-color: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+.disconnected .cycler-status {
+    background-color: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+.cycler-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.cycler-title {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.cycler-value {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
