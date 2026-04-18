@@ -42,6 +42,7 @@ const els = {
     modalModel: document.getElementById('modal-model'),
     modalLoras: document.getElementById('modal-loras'),
     modalPositive: document.getElementById('modal-positive'),
+    modalNegative: document.getElementById('modal-negative'),
     modalRawJson: document.getElementById('modal-raw-json'),
     modalPromptBadge: document.getElementById('modal-prompt-badge'),
     btnDelete: document.getElementById('delete-image-btn'),
@@ -183,6 +184,7 @@ function extractComfyUIMetadata(jsonStr) {
         model: 'Unknown',
         loras: [],
         positivePrompt: '',
+        negativePrompt: '',
         cyclers: [],
         raw: null
     };
@@ -212,12 +214,51 @@ function extractComfyUIMetadata(jsonStr) {
             // Convert to array and include ID
             nodesArray = Object.entries(data).map(([id, node]) => ({ ...node, id }));
         }
+
+        const nodeMap = new Map();
+        nodesArray.forEach(node => {
+            if (node && node.id) nodeMap.set(String(node.id), node);
+        });
         
-        let positiveText = [];
+        let positiveTexts = [];
+        let negativeTexts = [];
         let standardModel = 'Unknown';
         let customModel = null;
-        let standardLoras = [];
         let customLoras = [];
+
+        // Helper to trace back from a node input
+        const traceInput = (node, inputName) => {
+            if (!node || !node.inputs) return null;
+            let sourceId = null;
+
+            if (isWorkflow) {
+                const inputs = Array.isArray(node.inputs) ? node.inputs : Object.values(node.inputs);
+                const inputEntry = inputs.find(i => i.name === inputName);
+                if (inputEntry && inputEntry.link) {
+                    const link = data.links && data.links.find(l => l[0] === inputEntry.link);
+                    if (link) sourceId = link[1];
+                }
+            } else {
+                const inputEntry = node.inputs[inputName];
+                if (Array.isArray(inputEntry) && inputEntry.length >= 2) {
+                    sourceId = inputEntry[0];
+                }
+            }
+            return sourceId ? String(sourceId) : null;
+        };
+
+        const getPromptFromNode = (nodeId) => {
+            const node = nodeMap.get(String(nodeId));
+            if (!node) return null;
+            const type = (node.class_type || node.type || '').toLowerCase();
+            if (type.includes('prompt') || type.includes('text')) {
+                const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
+                if (Array.isArray(wValues) && typeof wValues[0] === 'string') return wValues[0];
+                if (node.inputs && typeof node.inputs.text === 'string') return node.inputs.text;
+                if (Array.isArray(wValues)) return wValues.find(v => typeof v === 'string' && v.length > 3);
+            }
+            return null;
+        };
 
         nodesArray.forEach(node => {
             if (!node || typeof node !== 'object') return;
@@ -225,6 +266,7 @@ function extractComfyUIMetadata(jsonStr) {
             const classType = node.class_type || node.type || '';
             const title = node.title || '';
             const id = node.id;
+            const classTypeLower = classType.toLowerCase();
             
             if (!classType) return;
 
@@ -237,17 +279,28 @@ function extractComfyUIMetadata(jsonStr) {
             const wValues = node.widgets_values || node.widget_values || (node.inputs && (node.inputs.widgets_values || node.inputs.widget_values));
             const lowerTitle = title.toLowerCase();
 
+            // KSampler Tracing (Highest Priority for prompts)
+            if (classTypeLower.includes('ksampler') || classTypeLower.includes('sampler')) {
+                const posId = traceInput(node, 'positive');
+                const negId = traceInput(node, 'negative');
+                if (posId) {
+                    const text = getPromptFromNode(posId);
+                    if (text) positiveTexts.push(text);
+                }
+                if (negId) {
+                    const text = getPromptFromNode(negId);
+                    if (text) negativeTexts.push(text);
+                }
+            }
+
             // Extract Base Model
             if (lowerTitle === 'checkpoint' || lowerTitle.includes('checkpoint') || lowerTitle === 'ckpt' || lowerTitle.includes('ckpt')) {
-                // User specifies only looking in widget_values
                 if (wValues && Array.isArray(wValues)) {
-                    // Flatten since it may be an array of arrays
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
                     if (strVal) customModel = normalizeName(strVal);
                 }
             } else if (classType.includes('Model Cycler')) {
-                // Fallback for Model Cycler
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
                     if (cyclerVal) {
@@ -271,16 +324,13 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const traverse = (item) => {
                         if (Array.isArray(item)) {
-                            // If the first element is a string and looks like a Lora path
                             if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
                                (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
                                 customLoras.push(normalizeName(item[0].trim()));
                             } else {
-                                // Otherwise, search recursively into this array
                                 item.forEach(traverse);
                             }
                         } else if (typeof item === 'string' && item.includes('.safetensors')) {
-                            // Fallback for strings containing comma-separated formats
                             const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
@@ -291,7 +341,6 @@ function extractComfyUIMetadata(jsonStr) {
                     traverse(wValues);
                 }
             } else if (classType.includes('Lora Cycler')) {
-                // Fallback for Lora Cycler
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
@@ -306,36 +355,34 @@ function extractComfyUIMetadata(jsonStr) {
                     for (const loras of wValues) {
                         if (Array.isArray(loras)) {
                             for (const lora of loras) {
-                                customLoras.push(normalizeName(lora.name));
+                                if (lora && lora.name) customLoras.push(normalizeName(lora.name));
                             }
                         }
                     }
                 }
             }
 
-            // Extract Prompts (heuristics: looking for CLIPTextEncode)
-            if (classType === 'CLIPTextEncode') {
-                if (node.inputs && typeof node.inputs.text === 'string') {
-                    positiveText.push(node.inputs.text);
-                } else if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    positiveText.push(wValues[0]);
-                }
-            }
-            if (classType.includes('Positive Prompt')) {
-                if (wValues && Array.isArray(wValues) && typeof wValues[0] === 'string') {
-                    positiveText.push(wValues[0]);
-                }
+            // Heuristic Fallback for Prompts (if no sampler found or sampler trace failed)
+            if (classType === 'CLIPTextEncode' || classType.includes('Positive Prompt')) {
+                const text = getPromptFromNode(id);
+                if (text && !positiveTexts.includes(text)) positiveTexts.push(text);
             }
         });
 
         // Resolve Overrides
         result.model = customModel || standardModel;
-        result.loras = customLoras.length > 0 ? customLoras : standardLoras;
+        result.loras = [...new Set(customLoras)];
 
-        if (positiveText.length > 0) {
-            result.positivePrompt = positiveText.join('\n\n--- Also found ---\n');
+        if (positiveTexts.length > 0) {
+            result.positivePrompt = Array.from(new Set(positiveTexts)).join('\n\n--- Also found ---\n');
         } else {
-            result.positivePrompt = "No positive prompt string found (or custom node used).";
+            result.positivePrompt = "No positive prompt string found.";
+        }
+
+        if (negativeTexts.length > 0) {
+            result.negativePrompt = Array.from(new Set(negativeTexts)).join('\n\n--- Also found ---\n');
+        } else {
+            result.negativePrompt = "None detected.";
         }
 
     } catch (e) {
@@ -348,7 +395,7 @@ function extractComfyUIMetadata(jsonStr) {
 // Parse PNG chunks
 // Reads ArrayBuffer of a file to extract tEXt/iTXt chunks containing prompt data
 async function parsePNG(file) {
-    const defaultData = { name: file.name, model: 'Unknown', loras: [], positivePrompt: 'No metadata found', raw: null };
+    const defaultData = { name: file.name, model: 'Unknown', loras: [], positivePrompt: 'No metadata found', negativePrompt: 'No metadata found', raw: null };
     
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -422,6 +469,7 @@ async function parsePNG(file) {
             merged.model = getBest('model', 'Unknown');
             merged.loras = getBest('loras', []);
             merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
+            merged.negativePrompt = getBest('negativePrompt', 'None detected');
             merged.raw = rawJson;
             
             return merged;
@@ -790,6 +838,7 @@ function openImageModal(img) {
     }
     
     els.modalPositive.textContent = img.data.positivePrompt || 'None';
+    els.modalNegative.textContent = img.data.negativePrompt || 'None';
     
     // Render Cyclers if any
     let cyclersHtml = '';
