@@ -46,6 +46,8 @@ const els = {
     modalRawJson: document.getElementById('modal-raw-json'),
     modalPromptBadge: document.getElementById('modal-prompt-badge'),
     btnDelete: document.getElementById('delete-image-btn'),
+    btnPrev: document.getElementById('prev-image-btn'),
+    btnNext: document.getElementById('next-image-btn'),
     modalSidebar: document.querySelector('.modal-sidebar')
 };
 
@@ -97,6 +99,8 @@ async function init() {
     els.sortFilter.addEventListener('change', handleFilterChange);
     els.autoUpdateCb.addEventListener('change', toggleAutoUpdate);
     els.btnDelete.addEventListener('click', deleteImage);
+    els.btnPrev.addEventListener('click', () => navigateImage(-1));
+    els.btnNext.addEventListener('click', () => navigateImage(1));
     els.btnCloseModal.addEventListener('click', closeModal);
     
     // Filter from Modal

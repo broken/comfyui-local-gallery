@@ -442,6 +442,37 @@ main {
     transform: scale(1.05);
 }
 
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+    height: 32px;
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.nav-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+}
+
+.nav-btn:active {
+    transform: translateY(0);
+}
+
 .modal-layout {
     display: flex;
     height: 100%;
@@ -477,11 +508,19 @@ main {
 }
 
 /* Modal Sidebar Content */
+.modal-sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+}
+
 #modal-filename {
     font-size: 1.25rem;
-    margin-bottom: 2rem;
+    margin: 0;
     word-break: break-all;
     font-weight: 600;
+    margin-right: 1rem;
 }
 
 .metadata-section {
