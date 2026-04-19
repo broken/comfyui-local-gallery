@@ -486,6 +486,8 @@ main {
     justify-content: center;
     padding: 2rem;
     background: #000;
+    overflow: hidden; /* Prevent zoomed image from bleeding out */
+    position: relative;
 }
 
 .modal-image-container img {
@@ -493,6 +495,9 @@ main {
     max-height: 100%;
     object-fit: contain;
     border-radius: var(--border-radius-sm);
+    transition: transform 0.05s linear; /* Very short transition for smooth feel */
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .modal-sidebar {

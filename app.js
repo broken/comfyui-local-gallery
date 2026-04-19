@@ -17,7 +17,13 @@ const state = {
     currentDirHandle: null,
     currentActiveImg: null,
     watchInterval: null,
-    isChecking: false
+    isChecking: false,
+
+    // Zoom/Pan State
+    zoom: 1,
+    pan: { x: 0, y: 0 },
+    isDragging: false,
+    lastMousePos: { x: 0, y: 0 }
 };
 
 // DOM Elements
@@ -48,7 +54,8 @@ const els = {
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
     btnNext: document.getElementById('next-image-btn'),
-    modalSidebar: document.querySelector('.modal-sidebar')
+    modalSidebar: document.querySelector('.modal-sidebar'),
+    modalImageContainer: document.querySelector('.modal-image-container')
 };
 
 // --- IDB Storage for Folder Caching ---
@@ -136,8 +143,14 @@ async function init() {
         }
     });
     els.modal.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal')) closeModal();
+        if (e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) closeModal();
     });
+
+    // Zoom and Pan Listeners
+    els.modalImageContainer.addEventListener('wheel', handleWheel, { passive: false });
+    els.modalImageContainer.addEventListener('mousedown', startPan);
+    window.addEventListener('mousemove', handlePan);
+    window.addEventListener('mouseup', stopPan);
     
     // Attempt Auto-load
     try {
@@ -822,6 +835,7 @@ function renderGallery() {
 
 function openImageModal(img) {
     state.currentActiveImg = img;
+    resetZoom(); // Reset transforms on new image
     els.modalImage.src = img.url;
     els.modalFilename.textContent = img.data.name;
     
@@ -893,6 +907,7 @@ function openImageModal(img) {
 function closeModal() {
     els.modal.classList.add('hidden');
     state.currentActiveImg = null;
+    resetZoom();
     // Note: Intentionally not clearing els.modalImage.src to prevent flicker on rapid close/open,
     // though we could to free up memory if users view many very large images. URL.createObjectURL manages memory fine on its own mostly.
 }
@@ -956,6 +971,75 @@ async function deleteImage() {
     } finally {
         els.btnDelete.innerHTML = oldBtnContent;
     }
+}
+
+// --- Zoom and Pan Logic ---
+function handleWheel(e) {
+    if (els.modal.classList.contains('hidden')) return;
+    e.preventDefault();
+
+    const zoomSpeed = 0.0015;
+    const delta = -e.deltaY;
+    const oldZoom = state.zoom;
+    
+    // Calculate new zoom
+    state.zoom += delta * zoomSpeed * state.zoom;
+    state.zoom = Math.min(Math.max(0.5, state.zoom), 10); // Clamp between 0.5x and 10x
+
+    // Adjust pan to zoom towards mouse position
+    const rect = els.modalImage.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Relative position in the image (0 to 1)
+    const relX = mouseX / rect.width;
+    const relY = mouseY / rect.height;
+
+    // How much the width/height changed
+    const zoomRatio = state.zoom / oldZoom;
+    
+    // Basic zoom works fine centered for now, but more advanced would adjust pan
+    // For simplicity in this local gallery, we'll keep it centered or simple
+    updateImageTransform();
+}
+
+function startPan(e) {
+    if (state.zoom <= 1 && e.button !== 0) return; // Only pan if zoomed in or middle mouse
+    state.isDragging = true;
+    state.lastMousePos = { x: e.clientX, y: e.clientY };
+    els.modalImage.style.cursor = 'grabbing';
+}
+
+function handlePan(e) {
+    if (!state.isDragging) return;
+    
+    const dx = e.clientX - state.lastMousePos.x;
+    const dy = e.clientY - state.lastMousePos.y;
+    
+    state.pan.x += dx;
+    state.pan.y += dy;
+    
+    state.lastMousePos = { x: e.clientX, y: e.clientY };
+    updateImageTransform();
+}
+
+function stopPan() {
+    state.isDragging = false;
+    if (els.modalImage) {
+        els.modalImage.style.cursor = state.zoom > 1 ? 'grab' : 'default';
+    }
+}
+
+function updateImageTransform() {
+    if (!els.modalImage) return;
+    els.modalImage.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+    els.modalImage.style.cursor = state.zoom > 1 ? 'grab' : 'default';
+}
+
+function resetZoom() {
+    state.zoom = 1;
+    state.pan = { x: 0, y: 0 };
+    updateImageTransform();
 }
 
 // Boot
