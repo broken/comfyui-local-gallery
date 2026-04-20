@@ -54,6 +54,8 @@ const els = {
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
     btnNext: document.getElementById('next-image-btn'),
+    btnCopyPositive: document.getElementById('copy-positive-btn'),
+    btnCopyNegative: document.getElementById('copy-negative-btn'),
     modalSidebar: document.querySelector('.modal-sidebar'),
     modalImageContainer: document.querySelector('.modal-image-container')
 };
@@ -108,6 +110,8 @@ async function init() {
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnPrev.addEventListener('click', () => navigateImage(-1));
     els.btnNext.addEventListener('click', () => navigateImage(1));
+    els.btnCopyPositive.addEventListener('click', () => copyToClipboard(els.modalPositive.textContent, els.btnCopyPositive));
+    els.btnCopyNegative.addEventListener('click', () => copyToClipboard(els.modalNegative.textContent, els.btnCopyNegative));
     els.btnCloseModal.addEventListener('click', closeModal);
     
     // Filter from Modal
@@ -831,6 +835,26 @@ function renderGallery() {
     });
     
     els.galleryGrid.appendChild(fragment);
+}
+
+async function copyToClipboard(text, btn) {
+    if (!text || text === 'None' || text === 'No metadata found' || text === 'None detected' || text === 'Not found') return;
+    
+    try {
+        await navigator.clipboard.writeText(text);
+        
+        // Visual feedback
+        const oldHtml = btn.innerHTML;
+        btn.classList.add('success');
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        
+        setTimeout(() => {
+            btn.classList.remove('success');
+            btn.innerHTML = oldHtml;
+        }, 2000);
+    } catch (err) {
+        console.error('Failed to copy metadata:', err);
+    }
 }
 
 function openImageModal(img) {

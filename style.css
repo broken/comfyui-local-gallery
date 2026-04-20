@@ -540,7 +540,36 @@ main {
     margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
+}
+
+.metadata-section h4 span {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.copy-metadata-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+}
+
+.copy-metadata-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.copy-metadata-btn.success {
+    color: #22c55e;
 }
 
 .metadata-value {
