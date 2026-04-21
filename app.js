@@ -383,6 +383,22 @@ function extractComfyUIMetadata(jsonStr) {
                 }
             }
 
+            // Extract from Prompt Selection explicitly
+            if (classType === 'Prompt Selection') {
+                if (Array.isArray(wValues)) {
+                    // Python node defines index 0:index, 1:prompt_data, 2:selected_positive, 3:selected_negative
+                    if (wValues[2] && typeof wValues[2] === 'string') positiveTexts.push(wValues[2]);
+                    if (wValues[3] && typeof wValues[3] === 'string') negativeTexts.push(wValues[3]);
+                } else if (node.inputs) {
+                    if (node.inputs.selected_positive && typeof node.inputs.selected_positive === 'string') {
+                        positiveTexts.push(node.inputs.selected_positive);
+                    }
+                    if (node.inputs.selected_negative && typeof node.inputs.selected_negative === 'string') {
+                        negativeTexts.push(node.inputs.selected_negative);
+                    }
+                }
+            }
+
             // Heuristic Fallback for Prompts (if no sampler found or sampler trace failed)
             if (classType === 'CLIPTextEncode' || classType.includes('Positive Prompt')) {
                 const text = getPromptFromNode(id);
