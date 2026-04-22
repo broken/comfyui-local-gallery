@@ -196,8 +196,91 @@ async function init() {
 // Helper to strip paths and extensions from model/lora names
 const normalizeName = (name) => {
     if (!name || typeof name !== 'string') return name;
-    return name.split(/[/\\]/).pop().replace(/\.safetensors$/i, '');
+    return name.split(/[/\\]/).pop().replace(/\.safetensors$/i, '').trim();
 };
+
+/**
+ * Parses the standard A1111-style multi-line metadata format
+ * used by LoRA Manager and other SD tools.
+ */
+function parseStandardMetadata(text) {
+    if (!text || typeof text !== 'string') return null;
+
+    const result = {
+        model: 'Unknown',
+        loras: [],
+        positivePrompt: '',
+        negativePrompt: '',
+        seed: null,
+        raw: text
+    };
+
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) return null;
+
+    // The format is typically:
+    // [Positive Prompt]
+    // Negative prompt: [Negative Prompt]
+    // Steps: 20, Sampler: Euler, ... Model: model_name, ...
+    
+    let lastPart = lines[lines.length - 1];
+    let paramsSection = '';
+    let negativeSection = '';
+    let positiveLines = [];
+
+    // Check if the last line contains key parameters
+    if (lastPart.includes('Steps:') || lastPart.includes('Seed:')) {
+        paramsSection = lines.pop();
+    }
+
+    // Identify Negative Prompt line
+    const negIdx = lines.findIndex(l => l.startsWith('Negative prompt:'));
+    if (negIdx !== -1) {
+        negativeSection = lines[negIdx].replace('Negative prompt:', '').trim();
+        positiveLines = lines.slice(0, negIdx);
+    } else {
+        positiveLines = lines;
+    }
+
+    result.positivePrompt = positiveLines.join('\n');
+    result.negativePrompt = negativeSection;
+
+    // Parse Parameters (comma separated k: v pairs)
+    if (paramsSection) {
+        const parts = paramsSection.split(',').map(p => p.trim());
+        parts.forEach(part => {
+            const [key, ...valParts] = part.split(':').map(v => v.trim());
+            const val = valParts.join(':');
+            
+            if (key === 'Model') {
+                result.model = normalizeName(val);
+            } else if (key === 'Seed') {
+                result.seed = val;
+            } else if (key === 'Lora hashes') {
+                // Example: Lora hashes: "lora1: abc, lora2: def"
+                const loraNames = val.match(/"([^"]+)"/);
+                if (loraNames) {
+                    loraNames[1].split(',').forEach(l => {
+                        const lName = l.split(':')[0].trim();
+                        if (lName) result.loras.push(normalizeName(lName));
+                    });
+                }
+            }
+        });
+    }
+
+    // Extract LoRAs from prompt if they are in <lora:name:strength> format
+    const loraMatches = result.positivePrompt.match(/<lora:([^:]+):[^>]+>/g);
+    if (loraMatches) {
+        loraMatches.forEach(m => {
+            const name = m.match(/<lora:([^:]+):/)[1];
+            if (name) result.loras.push(normalizeName(name));
+        });
+    }
+    
+    result.loras = [...new Set(result.loras)];
+    return result;
+}
 
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
 function extractComfyUIMetadata(jsonStr) {
@@ -478,6 +561,15 @@ async function parsePNG(file) {
                     } else if (keyword === 'workflow') {
                         workflowMetadata = extractComfyUIMetadata(textStr);
                         try { rawJson.workflow = JSON.parse(textStr); } catch(e){}
+                    } else if (keyword === 'parameters' || keyword === 'metadata') {
+                        // Priority source: The cleaned truth written by Lora Manager or A1111
+                        const standardMetadata = parseStandardMetadata(textStr);
+                        if (standardMetadata) {
+                            if (!promptMetadata) promptMetadata = {};
+                            // Override with verified values
+                            Object.assign(promptMetadata, standardMetadata);
+                            promptMetadata.priorityResult = true; // Flag that we have "Final Truth"
+                        }
                     }
                 }
             } else if (type === 'IEND') {
@@ -490,6 +582,12 @@ async function parsePNG(file) {
             const merged = { ...defaultData };
             
             const getBest = (key, defaultVal) => {
+                // If we have a priority result (from 'parameters' chunk), trust it globally
+                if (promptMetadata && promptMetadata.priorityResult && promptMetadata[key]) {
+                    if (key === 'loras' && promptMetadata[key].length > 0) return promptMetadata[key];
+                    if (key !== 'loras' && promptMetadata[key] !== defaultVal) return promptMetadata[key];
+                }
+
                 let vP = promptMetadata ? promptMetadata[key] : null;
                 let vW = workflowMetadata ? workflowMetadata[key] : null;
                 
