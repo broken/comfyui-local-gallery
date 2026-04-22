@@ -52,6 +52,12 @@ const els = {
     modalRawJson: document.getElementById('modal-raw-json'),
     modalRawParameters: document.getElementById('modal-raw-parameters'),
     modalParametersSection: document.getElementById('modal-parameters-section'),
+    modalSettingsSection: document.getElementById('modal-settings-section'),
+    modalSteps: document.getElementById('modal-steps'),
+    modalCfg: document.getElementById('modal-cfg'),
+    modalSampler: document.getElementById('modal-sampler'),
+    modalSize: document.getElementById('modal-size'),
+    modalSeed: document.getElementById('modal-seed'),
     modalPromptBadge: document.getElementById('modal-prompt-badge'),
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
@@ -1059,8 +1065,17 @@ function openImageModal(img) {
     if (img.data.parameters) {
         els.modalParametersSection.classList.remove('hidden');
         els.modalRawParameters.textContent = JSON.stringify(img.data.parameters, null, 2);
+        
+        // Populate settings grid
+        els.modalSettingsSection.classList.remove('hidden');
+        els.modalSteps.textContent = img.data.parameters.steps || '-';
+        els.modalCfg.textContent = img.data.parameters.cfg || '-';
+        els.modalSampler.textContent = img.data.parameters.sampler || '-';
+        els.modalSize.textContent = img.data.parameters.size || '-';
+        els.modalSeed.textContent = img.data.parameters.seed || '-';
     } else {
         els.modalParametersSection.classList.add('hidden');
+        els.modalSettingsSection.classList.add('hidden');
         els.modalRawParameters.textContent = '';
     }
 
