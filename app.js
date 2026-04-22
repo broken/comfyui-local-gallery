@@ -214,6 +214,10 @@ function parseStandardMetadata(text) {
         positivePrompt: '',
         negativePrompt: '',
         seed: null,
+        steps: null,
+        sampler: null,
+        cfgScale: null,
+        size: null,
         raw: text
     };
 
@@ -258,6 +262,14 @@ function parseStandardMetadata(text) {
                 result.model = normalizeName(val);
             } else if (key === 'Seed') {
                 result.seed = val;
+            } else if (key === 'Steps') {
+                result.steps = val;
+            } else if (key === 'Sampler') {
+                result.sampler = val;
+            } else if (key === 'CFG scale') {
+                result.cfgScale = val;
+            } else if (key === 'Size') {
+                result.size = val;
             } else if (key === 'Lora hashes') {
                 // Example: Lora hashes: "lora1: abc, lora2: def"
                 const loraNames = val.match(/"([^"]+)"/);
