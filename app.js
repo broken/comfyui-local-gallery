@@ -216,7 +216,7 @@ function parseStandardMetadata(text) {
         seed: null,
         steps: null,
         sampler: null,
-        cfgScale: null,
+        cfg: null,
         size: null,
         raw: text
     };
@@ -267,7 +267,7 @@ function parseStandardMetadata(text) {
             } else if (key === 'Sampler') {
                 result.sampler = val;
             } else if (key === 'CFG scale') {
-                result.cfgScale = val;
+                result.cfg = val;
             } else if (key === 'Size') {
                 result.size = val;
             } else if (key === 'Lora hashes') {
