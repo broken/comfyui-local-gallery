@@ -58,7 +58,6 @@ const els = {
     modalSampler: document.getElementById('modal-sampler'),
     modalSize: document.getElementById('modal-size'),
     modalSeed: document.getElementById('modal-seed'),
-    modalPromptBadge: document.getElementById('modal-prompt-badge'),
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
     btnNext: document.getElementById('next-image-btn'),
@@ -1079,13 +1078,6 @@ function openImageModal(img) {
         els.modalRawParameters.textContent = '';
     }
 
-    if (img.data.raw) {
-        els.modalPromptBadge.textContent = 'Found';
-        els.modalPromptBadge.style.backgroundColor = '#22c55e'; // green
-    } else {
-        els.modalPromptBadge.textContent = 'Missing';
-        els.modalPromptBadge.style.backgroundColor = '#ef4444'; // red
-    }
 
     els.modal.classList.remove('hidden');
 }
