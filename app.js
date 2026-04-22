@@ -50,6 +50,8 @@ const els = {
     modalPositive: document.getElementById('modal-positive'),
     modalNegative: document.getElementById('modal-negative'),
     modalRawJson: document.getElementById('modal-raw-json'),
+    modalRawParameters: document.getElementById('modal-raw-parameters'),
+    modalParametersSection: document.getElementById('modal-parameters-section'),
     modalPromptBadge: document.getElementById('modal-prompt-badge'),
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
@@ -515,7 +517,15 @@ function extractComfyUIMetadata(jsonStr) {
 // Parse PNG chunks
 // Reads ArrayBuffer of a file to extract tEXt/iTXt chunks containing prompt data
 async function parsePNG(file) {
-    const defaultData = { name: file.name, model: 'Unknown', loras: [], positivePrompt: 'No metadata found', negativePrompt: 'No metadata found', raw: null };
+    const defaultData = { 
+        name: file.name, 
+        model: 'Unknown', 
+        loras: [], 
+        positivePrompt: 'No metadata found', 
+        negativePrompt: 'No metadata found', 
+        raw: null,
+        parameters: null
+    };
     
     try {
         const arrayBuffer = await file.arrayBuffer();
@@ -566,6 +576,8 @@ async function parsePNG(file) {
                         const standardMetadata = parseStandardMetadata(textStr);
                         if (standardMetadata) {
                             if (!promptMetadata) promptMetadata = {};
+                            // Store the structured object separately as requested
+                            promptMetadata.parameters = standardMetadata;
                             // Override with verified values
                             Object.assign(promptMetadata, standardMetadata);
                             promptMetadata.priorityResult = true; // Flag that we have "Final Truth"
@@ -606,6 +618,7 @@ async function parsePNG(file) {
             merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
             merged.negativePrompt = getBest('negativePrompt', 'None detected');
             merged.raw = rawJson;
+            merged.parameters = promptMetadata ? promptMetadata.parameters : null;
             
             return merged;
         }
@@ -1029,6 +1042,14 @@ function openImageModal(img) {
         els.modalRawJson.textContent = JSON.stringify(img.data.raw, null, 2);
     } else {
         els.modalRawJson.textContent = 'No ComfyUI generation data found in this file.';
+    }
+
+    if (img.data.parameters) {
+        els.modalParametersSection.classList.remove('hidden');
+        els.modalRawParameters.textContent = JSON.stringify(img.data.parameters, null, 2);
+    } else {
+        els.modalParametersSection.classList.add('hidden');
+        els.modalRawParameters.textContent = '';
     }
 
     if (img.data.raw) {
