@@ -135,7 +135,8 @@ async function init() {
     els.modalLoras.addEventListener('click', (e) => {
         const loraTag = e.target.closest('.lora-tag');
         if (loraTag && !loraTag.classList.contains('empty-state')) {
-            els.loraFilter.value = loraTag.textContent.trim();
+            const loraName = loraTag.dataset.loraName || loraTag.textContent.trim();
+            els.loraFilter.value = loraName;
             handleFilterChange();
             closeModal();
         }
@@ -1133,12 +1134,11 @@ function openImageModal(img) {
     }
     
     // Render LoRAs
-    if (img.data.loras.length > 0) {
         els.modalLoras.innerHTML = img.data.loras.map(l => {
             const name = typeof l === 'string' ? l : l.name;
             const weight = typeof l === 'string' ? 1.0 : l.weight;
             const display = weight !== 1.0 ? `${name} (${weight})` : name;
-            return `<li class="lora-tag clickable" title="${display}">${display}</li>`;
+            return `<li class="lora-tag clickable" data-lora-name="${name}" title="${display}">${display}</li>`;
         }).join('');
     } else {
         els.modalLoras.innerHTML = '<li class="lora-tag empty-state" style="color:#a0a5b1; font-size:0.9rem;">No LoRAs detected</li>';
