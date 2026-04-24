@@ -571,34 +571,80 @@ async function parsePNG(file) {
                 const chunkDataView = new Uint8Array(arrayBuffer, offset + 8, length);
                 const decoder = new TextDecoder('utf-8'); 
                 
+                let keyword = '';
+                let textStr = '';
+
                 if (type === 'tEXt') {
-                    let nullIdx = 0;
+                    let nullIdx = -1;
                     for (let i = 0; i < chunkDataView.length; i++) {
                         if (chunkDataView[i] === 0) {
                             nullIdx = i;
                             break;
                         }
                     }
-                    const keyword = decoder.decode(chunkDataView.subarray(0, nullIdx));
-                    const textStr = decoder.decode(chunkDataView.subarray(nullIdx + 1));
                     
-                    if (keyword === 'prompt') {
-                        promptMetadata = extractComfyUIMetadata(textStr);
-                        try { rawJson.prompt = JSON.parse(textStr); } catch(e){}
-                    } else if (keyword === 'workflow') {
-                        workflowMetadata = extractComfyUIMetadata(textStr);
-                        try { rawJson.workflow = JSON.parse(textStr); } catch(e){}
-                    } else if (keyword === 'parameters' || keyword === 'metadata') {
-                        // Priority source: The cleaned truth written by Lora Manager or A1111
-                        const standardMetadata = parseStandardMetadata(textStr);
-                        if (standardMetadata) {
-                            if (!promptMetadata) promptMetadata = {};
-                            // Store the structured object separately as requested
-                            promptMetadata.parameters = standardMetadata;
-                            // Override with verified values
-                            Object.assign(promptMetadata, standardMetadata);
-                            promptMetadata.priorityResult = true; // Flag that we have "Final Truth"
+                    if (nullIdx !== -1) {
+                        keyword = decoder.decode(chunkDataView.subarray(0, nullIdx));
+                        textStr = decoder.decode(chunkDataView.subarray(nullIdx + 1));
+                    }
+                } else if (type === 'iTXt') {
+                    let nullIdx = -1;
+                    for (let i = 0; i < chunkDataView.length; i++) {
+                        if (chunkDataView[i] === 0) {
+                            nullIdx = i;
+                            break;
                         }
+                    }
+
+                    if (nullIdx !== -1) {
+                        keyword = decoder.decode(chunkDataView.subarray(0, nullIdx));
+                        
+                        // iTXt structure:
+                        // keyword (null)
+                        // compression flag (1 byte)
+                        // compression method (1 byte)
+                        // language tag (null terminated)
+                        // translated keyword (null terminated)
+                        // text (UTF-8)
+                        
+                        let textOffset = nullIdx + 3; // skip null, flag, method
+                        
+                        // Skip language tag
+                        while (textOffset < chunkDataView.length && chunkDataView[textOffset] !== 0) textOffset++;
+                        textOffset++; // skip null
+                        
+                        // Skip translated keyword
+                        while (textOffset < chunkDataView.length && chunkDataView[textOffset] !== 0) textOffset++;
+                        textOffset++; // skip null
+                        
+                        if (textOffset <= chunkDataView.length) {
+                            const isCompressed = chunkDataView[nullIdx + 1] === 1;
+                            if (isCompressed) {
+                                // SD tools rarely compress this, and we don't have pako here.
+                                console.warn(`Compressed iTXt chunk '${keyword}' found but not supported.`);
+                            } else {
+                                textStr = decoder.decode(chunkDataView.subarray(textOffset));
+                            }
+                        }
+                    }
+                }
+                
+                if (keyword === 'prompt') {
+                    promptMetadata = extractComfyUIMetadata(textStr);
+                    try { rawJson.prompt = JSON.parse(textStr); } catch(e){}
+                } else if (keyword === 'workflow') {
+                    workflowMetadata = extractComfyUIMetadata(textStr);
+                    try { rawJson.workflow = JSON.parse(textStr); } catch(e){}
+                } else if (keyword === 'parameters' || keyword === 'metadata') {
+                    // Priority source: The cleaned truth written by Lora Manager or A1111
+                    const standardMetadata = parseStandardMetadata(textStr);
+                    if (standardMetadata) {
+                        if (!promptMetadata) promptMetadata = {};
+                        // Store the structured object separately as requested
+                        promptMetadata.parameters = standardMetadata;
+                        // Override with verified values
+                        Object.assign(promptMetadata, standardMetadata);
+                        promptMetadata.priorityResult = true; // Flag that we have "Final Truth"
                     }
                 }
             } else if (type === 'IEND') {
