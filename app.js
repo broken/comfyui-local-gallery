@@ -1231,7 +1231,7 @@ async function sendAllToComfyUI() {
 
     const oldBtnContent = els.btnSendAll.innerHTML;
     els.btnSendAll.classList.add('loading');
-    els.btnSendAll.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px; margin: 0;"></div> <span>Sending...</span>';
+    els.btnSendAll.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></div>';
 
     try {
         // 1. Fetch Registry
@@ -1314,11 +1314,13 @@ async function sendAllToComfyUI() {
         // Success Feedback
         els.btnSendAll.classList.remove('loading');
         els.btnSendAll.style.background = '#059669'; // Success green
-        els.btnSendAll.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Sent!</span>';
+        els.btnSendAll.style.borderColor = '#059669';
+        els.btnSendAll.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
         els.statusText.textContent = `Successfully sent parameters for ${img.data.name} to ComfyUI.`;
 
         setTimeout(() => {
             els.btnSendAll.style.background = '';
+            els.btnSendAll.style.borderColor = '';
             els.btnSendAll.innerHTML = oldBtnContent;
         }, 2000);
 

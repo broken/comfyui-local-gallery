@@ -110,13 +110,13 @@ button {
 }
 
 #send-all-btn {
-    padding: 0.5rem 0.8rem;
-    font-size: 0.85rem;
-    background: linear-gradient(135deg, var(--accent-color), #4f46e5);
+    transition: all 0.2s ease;
 }
 
-#send-all-btn span {
-    white-space: nowrap;
+#send-all-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
 }
 
 #send-all-btn.loading {
@@ -530,9 +530,15 @@ main {
 /* Modal Sidebar Content */
 .modal-sidebar-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
     margin-bottom: 2rem;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
 #modal-filename {
