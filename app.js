@@ -63,6 +63,7 @@ const els = {
     btnNext: document.getElementById('next-image-btn'),
     btnCopyPositive: document.getElementById('copy-positive-btn'),
     btnCopyNegative: document.getElementById('copy-negative-btn'),
+    btnSendAll: document.getElementById('send-all-btn'),
     modalSidebar: document.querySelector('.modal-sidebar'),
     modalImageContainer: document.querySelector('.modal-image-container')
 };
@@ -119,6 +120,7 @@ async function init() {
     els.btnNext.addEventListener('click', () => navigateImage(1));
     els.btnCopyPositive.addEventListener('click', () => copyToClipboard(els.modalPositive.textContent, els.btnCopyPositive));
     els.btnCopyNegative.addEventListener('click', () => copyToClipboard(els.modalNegative.textContent, els.btnCopyNegative));
+    els.btnSendAll.addEventListener('click', sendAllToComfyUI);
     els.btnCloseModal.addEventListener('click', closeModal);
     
     // Filter from Modal
@@ -324,6 +326,10 @@ function extractComfyUIMetadata(jsonStr) {
         loras: [],
         positivePrompt: '',
         negativePrompt: '',
+        seed: null,
+        steps: null,
+        cfg: null,
+        sampler: null,
         cyclers: [],
         raw: null
     };
@@ -429,6 +435,20 @@ function extractComfyUIMetadata(jsonStr) {
                 if (negId) {
                     const text = getPromptFromNode(negId);
                     if (text) negativeTexts.push(text);
+                }
+
+                // Extract KSampler widgets
+                if (node.inputs) {
+                    if (node.inputs.seed !== undefined && result.seed === null) result.seed = node.inputs.seed;
+                    if (node.inputs.steps !== undefined && result.steps === null) result.steps = node.inputs.steps;
+                    if (node.inputs.cfg !== undefined && result.cfg === null) result.cfg = node.inputs.cfg;
+                    if (node.inputs.sampler_name !== undefined && result.sampler === null) result.sampler = node.inputs.sampler_name;
+                } else if (wValues && Array.isArray(wValues)) {
+                    // Fallback for some formats where inputs are flat or missing
+                    if (result.seed === null) result.seed = wValues[0];
+                    if (result.steps === null) result.steps = wValues[2];
+                    if (result.cfg === null) result.cfg = wValues[3];
+                    if (result.sampler === null) result.sampler = wValues[4];
                 }
             }
 
@@ -720,6 +740,10 @@ async function parsePNG(file) {
             merged.loras = getBest('loras', []);
             merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
             merged.negativePrompt = getBest('negativePrompt', 'None detected');
+            merged.seed = getBest('seed', null);
+            merged.steps = getBest('steps', null);
+            merged.cfg = getBest('cfg', null);
+            merged.sampler = getBest('sampler', null);
             merged.raw = rawJson;
             merged.parameters = promptMetadata ? promptMetadata.parameters : null;
             
@@ -1198,6 +1222,112 @@ function navigateImage(direction) {
     if (nextIndex >= state.filteredImages.length) nextIndex = 0;
     
     openImageModal(state.filteredImages[nextIndex]);
+}
+
+async function sendAllToComfyUI() {
+    if (!state.currentActiveImg) return;
+    const img = state.currentActiveImg;
+    const data = img.data;
+
+    const oldBtnContent = els.btnSendAll.innerHTML;
+    els.btnSendAll.classList.add('loading');
+    els.btnSendAll.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px; margin: 0;"></div> <span>Sending...</span>';
+
+    try {
+        // 1. Fetch Registry
+        const registryResponse = await fetch('/api/lm/get-registry');
+        const registryData = await registryResponse.json();
+        if (!registryData.success) throw new Error(registryData.error || 'Failed to fetch registry');
+        
+        // Registry data might be nested in .data.nodes or just .nodes depending on version
+        const nodes = (registryData.data && registryData.data.nodes) || registryData.nodes || {};
+
+        const results = [];
+
+        // Helper to send widget update
+        const sendWidget = async (widgetNames, value) => {
+            if (value === null || value === undefined || value === 'Unknown' || value === '-') return;
+            
+            const names = Array.isArray(widgetNames) ? widgetNames : [widgetNames];
+            
+            // Find nodes that have any of these widgets
+            const targetNodeIds = Object.entries(nodes)
+                .filter(([id, node]) => node.widget_names && names.some(name => node.widget_names.includes(name)))
+                .map(([id, node]) => id);
+
+            if (targetNodeIds.length > 0) {
+                const res = await fetch('/api/lm/update-node-widget', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        widget_name: names[0], // Use first name as primary identifier
+                        value: String(value), 
+                        node_ids: targetNodeIds 
+                    })
+                });
+                results.push(await res.json());
+            }
+        };
+
+        // 2. Send Parameters
+        await sendWidget(['ckpt_name', 'unet_name', 'model_name'], data.model);
+        await sendWidget('seed', data.seed);
+        await sendWidget('steps', data.steps);
+        await sendWidget('cfg', data.cfg);
+        await sendWidget(['sampler_name', 'sampler'], data.sampler);
+        
+        // 3. Send Positive Prompt & LoRAs
+        let fullPositive = data.positivePrompt;
+        // Clean up "No metadata found" or similar
+        if (fullPositive === 'No metadata found' || fullPositive === 'No positive prompt string found.') {
+            fullPositive = '';
+        }
+
+        if (data.loras && data.loras.length > 0) {
+            const loraSyntax = data.loras.map(l => `<lora:${l.name}:${l.weight}>`).join(' ');
+            fullPositive = loraSyntax + '\n' + fullPositive;
+        }
+
+        if (fullPositive.trim()) {
+            const loraRes = await fetch('/api/lm/update-lora-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lora_code: fullPositive.trim(),
+                    mode: 'replace',
+                    model_type: 'lora'
+                })
+            });
+            results.push(await loraRes.json());
+        }
+
+        // 4. Send Negative Prompt (If detected)
+        if (data.negativePrompt && data.negativePrompt !== 'None detected.' && data.negativePrompt !== 'None') {
+             // Look for CLIPTextEncode nodes that might be negative
+             // Lora Manager's update-node-widget can be used if we know the widget name (usually 'text')
+             // However, without a way to distinguish positive/negative nodes easily, 
+             // we'll rely on the user to have a dedicated negative node that we can potentially target.
+             // For now, we skip auto-sending negative to avoid overwriting positive prompts 
+             // unless we add more sophisticated node tagging.
+        }
+
+        // Success Feedback
+        els.btnSendAll.classList.remove('loading');
+        els.btnSendAll.style.background = '#059669'; // Success green
+        els.btnSendAll.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Sent!</span>';
+        els.statusText.textContent = `Successfully sent parameters for ${img.data.name} to ComfyUI.`;
+
+        setTimeout(() => {
+            els.btnSendAll.style.background = '';
+            els.btnSendAll.innerHTML = oldBtnContent;
+        }, 2000);
+
+    } catch (err) {
+        console.error('Failed to send to ComfyUI:', err);
+        els.btnSendAll.classList.remove('loading');
+        els.btnSendAll.innerHTML = oldBtnContent;
+        alert(`Failed to send to ComfyUI: ${err.message}. Make sure the Lora Manager extension is active in ComfyUI.`);
+    }
 }
 
 async function deleteImage() {

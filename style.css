@@ -109,6 +109,21 @@ button {
     transform: translateY(0);
 }
 
+#send-all-btn {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    background: linear-gradient(135deg, var(--accent-color), #4f46e5);
+}
+
+#send-all-btn span {
+    white-space: nowrap;
+}
+
+#send-all-btn.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
 .search-box {
     position: relative;
     display: flex;
