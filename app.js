@@ -281,7 +281,7 @@ function parseStandardMetadata(text) {
                 if (loraNames) {
                     loraNames[1].split(',').forEach(l => {
                         const lName = l.split(':')[0].trim();
-                        if (lName) result.loras.push(normalizeName(lName));
+                        if (lName) result.loras.push({ name: normalizeName(lName), weight: 1.0 });
                     });
                 }
             }
@@ -289,15 +289,31 @@ function parseStandardMetadata(text) {
     }
 
     // Extract LoRAs from prompt if they are in <lora:name:strength> format
-    const loraMatches = result.positivePrompt.match(/<lora:([^:]+):[^>]+>/g);
+    const loraMatches = result.positivePrompt.match(/<lora:([^:]+):([^>]+)>/g);
     if (loraMatches) {
         loraMatches.forEach(m => {
-            const name = m.match(/<lora:([^:]+):/)[1];
-            if (name) result.loras.push(normalizeName(name));
+            const match = m.match(/<lora:([^:]+):([^>]+)>/);
+            const name = match[1];
+            const weight = parseFloat(match[2]);
+            if (name) {
+                result.loras.push({ 
+                    name: normalizeName(name), 
+                    weight: isNaN(weight) ? 1.0 : weight 
+                });
+            }
         });
     }
     
-    result.loras = [...new Set(result.loras)];
+    // Deduplicate LoRAs by name, keeping the first one found (usually the one from the prompt has the weight)
+    const uniqueLoras = [];
+    const seenNames = new Set();
+    for (const lora of result.loras) {
+        if (!seenNames.has(lora.name)) {
+            seenNames.add(lora.name);
+            uniqueLoras.push(lora);
+        }
+    }
+    result.loras = uniqueLoras;
     return result;
 }
 
@@ -449,7 +465,9 @@ function extractComfyUIMetadata(jsonStr) {
                         if (Array.isArray(item)) {
                             if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
                                (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
-                                customLoras.push(normalizeName(item[0].trim()));
+                                const name = normalizeName(item[0].trim());
+                                const weight = item.length > 1 ? parseFloat(item[1]) : 1.0;
+                                customLoras.push({ name, weight: isNaN(weight) ? 1.0 : weight });
                             } else {
                                 item.forEach(traverse);
                             }
@@ -457,7 +475,9 @@ function extractComfyUIMetadata(jsonStr) {
                             const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
-                                customLoras.push(normalizeName(loraName));
+                                const name = normalizeName(loraName);
+                                const weight = parts.length > 1 ? parseFloat(parts[1]) : 1.0;
+                                customLoras.push({ name, weight: isNaN(weight) ? 1.0 : weight });
                             }
                         }
                     };
@@ -469,7 +489,11 @@ function extractComfyUIMetadata(jsonStr) {
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
                         const name = normalizeName(cyclerVal.current_lora_name);
                         result.cyclers.push({ type: 'lora', name, hooked: isHooked, title: title || classType });
-                        if (isHooked) customLoras.push(name);
+                        if (isHooked) {
+                            // Extract weight if available in cycler
+                            const weight = cyclerVal.current_lora_weight !== undefined ? parseFloat(cyclerVal.current_lora_weight) : 1.0;
+                            customLoras.push({ name, weight: isNaN(weight) ? 1.0 : weight });
+                        }
                     }
                 }
             }
@@ -478,7 +502,10 @@ function extractComfyUIMetadata(jsonStr) {
                     for (const loras of wValues) {
                         if (Array.isArray(loras)) {
                             for (const lora of loras) {
-                                if (lora && lora.name) customLoras.push(normalizeName(lora.name));
+                                if (lora && lora.name) {
+                                    const weight = lora.strength !== undefined ? lora.strength : (lora.weight !== undefined ? lora.weight : 1.0);
+                                    customLoras.push({ name: normalizeName(lora.name), weight: parseFloat(weight) || 1.0 });
+                                }
                             }
                         }
                     }
@@ -510,7 +537,20 @@ function extractComfyUIMetadata(jsonStr) {
 
         // Resolve Overrides
         result.model = customModel || standardModel;
-        result.loras = [...new Set(customLoras)];
+        
+        // Deduplicate LoRAs by name
+        const uniqueLoras = [];
+        const seenNames = new Set();
+        for (const lora of customLoras) {
+            const loraName = typeof lora === 'string' ? lora : lora.name;
+            const loraObj = typeof lora === 'string' ? { name: lora, weight: 1.0 } : lora;
+            
+            if (!seenNames.has(loraName)) {
+                seenNames.add(loraName);
+                uniqueLoras.push(loraObj);
+            }
+        }
+        result.loras = uniqueLoras;
 
         if (positiveTexts.length > 0) {
             result.positivePrompt = Array.from(new Set(positiveTexts)).join('\n\n--- Also found ---\n');
@@ -869,7 +909,7 @@ async function processBatch(filesBatch, silent = false) {
                 metadata.model = existingModel;
             }
         }
-        metadata.loras.forEach(l => state.loras.add(l));
+        metadata.loras.forEach(l => state.loras.add(typeof l === 'string' ? l : l.name));
         
         return {
             file,
@@ -936,7 +976,7 @@ function handleFilterChange() {
         const matchesSearch = !state.searchQuery || 
                               img.data.name.toLowerCase().includes(state.searchQuery) ||
                               img.data.model.toLowerCase().includes(state.searchQuery) ||
-                              img.data.loras.some(l => l.toLowerCase().includes(state.searchQuery));
+                               img.data.loras.some(l => (typeof l === 'string' ? l : l.name).toLowerCase().includes(state.searchQuery));
                               
         // Specific Filename Filter
         const matchesFilename = !state.filenameQuery || img.data.name.toLowerCase().includes(state.filenameQuery);
@@ -946,7 +986,7 @@ function handleFilterChange() {
         
         // LoRA Filter
         const matchesLora = !state.selectedLora ? true : 
-                          (state.selectedLora === '__no_lora__' ? img.data.loras.length === 0 : img.data.loras.includes(state.selectedLora));
+                          (state.selectedLora === '__no_lora__' ? img.data.loras.length === 0 : img.data.loras.some(l => (typeof l === 'string' ? l : l.name) === state.selectedLora));
         
         return matchesSearch && matchesFilename && matchesModel && matchesLora;
     });
@@ -1011,10 +1051,16 @@ function renderGallery() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 16.2A2 2 0 0 1 18.2 18H5.8A2 2 0 0 1 4 16.2V7.8A2 2 0 0 1 5.8 6h12.4a2 2 0 0 1 1.8 1.8v8.4z"></path><polyline points="10 11 12 13 14 11"></polyline></svg>
                     ${shortModelName}
                 </div>
-                ${img.data.loras.length === 1 ? `<div class="card-model" title="${img.data.loras[0]}">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    ${img.data.loras[0].length > 25 ? img.data.loras[0].substring(0, 25) + '...' : img.data.loras[0]}
-                </div>` : img.data.loras.length > 1 ? `<div class="card-model">
+                ${img.data.loras.length === 1 ? (() => {
+                    const l = img.data.loras[0];
+                    const name = typeof l === 'string' ? l : l.name;
+                    const weight = typeof l === 'string' ? 1.0 : l.weight;
+                    const display = weight !== 1.0 ? `${name} (${weight})` : name;
+                    return `<div class="card-model" title="${display}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        ${display.length > 25 ? display.substring(0, 25) + '...' : display}
+                    </div>`;
+                })() : img.data.loras.length > 1 ? `<div class="card-model">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                     ${img.data.loras.length} LoRAs
                 </div>` : ''}
@@ -1064,7 +1110,12 @@ function openImageModal(img) {
     
     // Render LoRAs
     if (img.data.loras.length > 0) {
-        els.modalLoras.innerHTML = img.data.loras.map(l => `<li class="lora-tag clickable">${l}</li>`).join('');
+        els.modalLoras.innerHTML = img.data.loras.map(l => {
+            const name = typeof l === 'string' ? l : l.name;
+            const weight = typeof l === 'string' ? 1.0 : l.weight;
+            const display = weight !== 1.0 ? `${name} (${weight})` : name;
+            return `<li class="lora-tag clickable" title="${display}">${display}</li>`;
+        }).join('');
     } else {
         els.modalLoras.innerHTML = '<li class="lora-tag empty-state" style="color:#a0a5b1; font-size:0.9rem;">No LoRAs detected</li>';
     }
