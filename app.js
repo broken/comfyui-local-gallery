@@ -1134,6 +1134,7 @@ function openImageModal(img) {
     }
     
     // Render LoRAs
+    if (img.data.loras.length > 0) {
         els.modalLoras.innerHTML = img.data.loras.map(l => {
             const name = typeof l === 'string' ? l : l.name;
             const weight = typeof l === 'string' ? 1.0 : l.weight;
