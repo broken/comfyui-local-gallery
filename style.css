@@ -461,6 +461,14 @@ main {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.action-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
 }
 
 .nav-btn {
@@ -539,7 +547,8 @@ main {
     display: flex;
     gap: 0.5rem;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
+    width: 100%;
 }
 
 #modal-filename {
