@@ -23,10 +23,7 @@ const state = {
     zoom: 1,
     pan: { x: 0, y: 0 },
     isDragging: false,
-    lastMousePos: { x: 0, y: 0 },
-    
-    // ComfyUI Configuration
-    comfyUrl: 'http://127.0.0.1:8188'
+    lastMousePos: { x: 0, y: 0 }
 };
 
 // DOM Elements
@@ -68,20 +65,8 @@ const els = {
     btnCopyNegative: document.getElementById('copy-negative-btn'),
     btnSendAll: document.getElementById('send-all-btn'),
     modalSidebar: document.querySelector('.modal-sidebar'),
-    modalImageContainer: document.querySelector('.modal-image-container'),
-    comfyUrlInput: document.getElementById('comfy-url-input')
+    modalImageContainer: document.querySelector('.modal-image-container')
 };
-
-function getApiUrl(endpoint) {
-    let baseUrl = state.comfyUrl || 'http://127.0.0.1:8188';
-    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-    if (!endpoint.startsWith('/')) endpoint = '/' + endpoint;
-    
-    // If we are served from the SAME origin as ComfyUI, relative paths are fine
-    // But if we are standalone, we need the full URL.
-    // If the user provided a full URL, use it.
-    return baseUrl + endpoint;
-}
 
 // --- IDB Storage for Folder Caching ---
 const dbName = 'ComfyUIGalleryDB';
@@ -123,25 +108,6 @@ async function loadHandle() {
 
 // Initialization
 async function init() {
-    // Load ComfyUI URL
-    const savedUrl = localStorage.getItem('comfyui_url');
-    if (savedUrl) {
-        state.comfyUrl = savedUrl;
-        els.comfyUrlInput.value = savedUrl;
-    } else {
-        els.comfyUrlInput.value = state.comfyUrl;
-    }
-
-    els.comfyUrlInput.addEventListener('change', () => {
-        let val = els.comfyUrlInput.value.trim();
-        if (val) {
-            if (!val.startsWith('http')) val = 'http://' + val;
-            state.comfyUrl = val;
-            els.comfyUrlInput.value = val;
-            localStorage.setItem('comfyui_url', val);
-        }
-    });
-
     els.btnSelect.addEventListener('click', handleFolderSelection);
     els.searchInput.addEventListener('input', handleFilterChange);
     els.filenameFilter.addEventListener('input', handleFilterChange);
@@ -1270,7 +1236,7 @@ async function sendAllToComfyUI() {
 
     try {
         // 1. Fetch Registry
-        const registryResponse = await fetch(getApiUrl('/api/lm/get-registry'));
+        const registryResponse = await fetch('/api/lm/get-registry');
         const registryData = await registryResponse.json();
         if (!registryData.success) throw new Error(registryData.error || 'Failed to fetch registry');
         
@@ -1291,7 +1257,7 @@ async function sendAllToComfyUI() {
                 .map(([id, node]) => id);
 
             if (targetNodeIds.length > 0) {
-                const res = await fetch(getApiUrl('/api/lm/update-node-widget'), {
+                const res = await fetch('/api/lm/update-node-widget', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -1324,7 +1290,7 @@ async function sendAllToComfyUI() {
         }
 
         if (fullPositive.trim()) {
-            const loraRes = await fetch(getApiUrl('/api/lm/update-lora-code'), {
+            const loraRes = await fetch('/api/lm/update-lora-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
