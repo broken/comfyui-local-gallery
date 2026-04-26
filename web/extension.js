@@ -28,7 +28,7 @@ app.registerExtension({
             });
             
             btn.onclick = () => {
-                window.open("/extensions/comfyui-local-gallery/index.html", "_blank");
+                window.open("/gallery", "_blank");
             };
 
             // Try to find the Lora Manager "L" button to place it next to it
