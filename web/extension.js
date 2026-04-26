@@ -7,7 +7,8 @@ import { app } from "../../scripts/app.js";
 app.registerExtension({
     name: "Comfy.LocalGallery",
     async setup() {
-        // Function to create the button
+        console.log("[Local Gallery] Extension loading...");
+
         const createGalleryButton = (container) => {
             if (container.querySelector('.gallery-nav-btn')) return;
 
@@ -16,45 +17,67 @@ app.registerExtension({
             btn.textContent = "G";
             btn.title = "Local Gallery";
             
-            // Basic styling to match the menu
+            // Stronger styling to ensure it stands out in the menu
             Object.assign(btn.style, {
                 fontWeight: "bold",
                 color: "#6366f1",
                 cursor: "pointer",
-                border: "none",
-                background: "none",
-                padding: "2px 5px",
-                fontSize: "14px"
+                border: "1px solid rgba(99, 102, 241, 0.3)",
+                background: "rgba(99, 102, 241, 0.1)",
+                borderRadius: "4px",
+                margin: "0 4px",
+                padding: "2px 8px",
+                fontSize: "14px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s"
             });
+
+            btn.onmouseover = () => {
+                btn.style.background = "rgba(99, 102, 241, 0.3)";
+                btn.style.borderColor = "rgba(99, 102, 241, 0.6)";
+            };
+            btn.onmouseout = () => {
+                btn.style.background = "rgba(99, 102, 241, 0.1)";
+                btn.style.borderColor = "rgba(99, 102, 241, 0.3)";
+            };
             
             btn.onclick = () => {
                 window.open("/gallery", "_blank");
             };
 
-            // Try to find the Lora Manager "L" button to place it next to it
-            const buttons = Array.from(container.querySelectorAll("button"));
-            const loraBtn = buttons.find(b => b.textContent === "L" || (b.title && b.title.includes("Lora Manager")));
-            
-            if (loraBtn) {
-                loraBtn.parentNode.insertBefore(btn, loraBtn.nextSibling);
-            } else {
-                container.appendChild(btn);
-            }
+            container.appendChild(btn);
+            console.log("[Local Gallery] Button added to menu");
         };
 
-        // 1. Classic UI (Floating Menu)
-        const menu = document.querySelector(".comfy-menu");
-        if (menu) {
-            createGalleryButton(menu);
-        }
+        const findAndAttach = () => {
+            // Target containers for various ComfyUI versions (ordered by preference)
+            const selectors = [
+                ".comfyui-menu .comfyui-button-container", // New UI Top Bar
+                ".comfy-menu-actions", // Classic UI Actions
+                ".comfy-menu", // Classic UI Main
+                ".comfyui-menu", // New UI General
+                ".comfyui-body-topbar" // Alternative Top Bar
+            ];
+            
+            for (const selector of selectors) {
+                const el = document.querySelector(selector);
+                if (el) {
+                    createGalleryButton(el);
+                    return true;
+                }
+            }
+            return false;
+        };
 
-        // 2. New UI (Top Bar / Sidebars)
-        // In newer versions, we might need to watch for the menu appearing
-        const observer = new MutationObserver((mutations) => {
-            const menu = document.querySelector(".comfy-menu") || document.querySelector(".comfyui-menu");
-            if (menu) createGalleryButton(menu);
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
+        // Check frequently for the first few seconds as the UI settles
+        let attempts = 0;
+        const interval = setInterval(() => {
+            if (findAndAttach() || attempts > 20) {
+                clearInterval(interval);
+            }
+            attempts++;
+        }, 500);
     }
 });
