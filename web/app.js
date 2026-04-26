@@ -109,6 +109,22 @@ async function loadHandle() {
 // Initialization
 async function init() {
     els.btnSelect.addEventListener('click', handleFolderSelection);
+    
+    // Fetch suggested output path from ComfyUI
+    try {
+        const response = await fetch('/api/gallery/output_path');
+        const data = await response.json();
+        if (data && data.path) {
+            state.suggestedPath = data.path;
+            els.btnSelect.title = `Suggested: ${data.path}`;
+            if (!state.currentDirHandle) {
+                els.statusText.textContent = `Hint: Select your ComfyUI output folder at ${data.path}`;
+            }
+        }
+    } catch (e) {
+        console.warn("Failed to fetch suggested output path:", e);
+    }
+
     els.searchInput.addEventListener('input', handleFilterChange);
     els.filenameFilter.addEventListener('input', handleFilterChange);
     els.modelFilter.addEventListener('change', handleFilterChange);
