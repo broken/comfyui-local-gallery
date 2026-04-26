@@ -159,6 +159,40 @@ button {
     cursor: not-allowed;
 }
 
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon svg {
+    position: absolute;
+    left: 10px;
+    color: var(--text-secondary);
+}
+
+.input-with-icon input {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.6rem 1rem 0.6rem 2.2rem;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.95rem;
+    width: 100%;
+    transition: var(--transition-fast);
+}
+
+.input-with-icon input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.comfy-url-box {
+    width: 250px;
+}
+
 /* Filters */
 .filters-area {
     display: flex;
