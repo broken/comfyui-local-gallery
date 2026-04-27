@@ -736,12 +736,31 @@ async function parsePNG(file) {
                     // Priority source: The cleaned truth written by Lora Manager or A1111
                     const standardMetadata = parseStandardMetadata(textStr);
                     if (standardMetadata) {
-                        if (!promptMetadata) promptMetadata = {};
-                        // Store the structured object separately as requested
+                        if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                        // Store the structured object separately
                         promptMetadata.parameters = standardMetadata;
-                        // Override with verified values
-                        Object.assign(promptMetadata, standardMetadata);
-                        promptMetadata.priorityResult = true; // Flag that we have "Final Truth"
+                        
+                        // Merge carefully: Don't overwrite a full path/extension with a shortened name
+                        Object.entries(standardMetadata).forEach(([key, value]) => {
+                            if (key === 'model') {
+                                const comfyPath = promptMetadata.model;
+                                const a1111Name = value;
+                                
+                                // Rule: Use the model path, but if and only if the a1111 is a substring of it. 
+                                // Otherwise, use the a1111 name.
+                                if (comfyPath !== 'Unknown' && comfyPath.toLowerCase().includes(a1111Name.toLowerCase())) {
+                                    // Keep the comfyPath
+                                } else {
+                                    promptMetadata.model = a1111Name;
+                                }
+                            } else if (key === 'loras') {
+                                if (promptMetadata.loras.length === 0) promptMetadata.loras = value;
+                            } else {
+                                promptMetadata[key] = value;
+                            }
+                        });
+                        
+                        promptMetadata.priorityResult = true; 
                     }
                 }
             } else if (type === 'IEND') {
