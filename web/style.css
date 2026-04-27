@@ -62,14 +62,14 @@ body {
 .logo-area h1 {
     font-size: 1.5rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #fff, #9ba3af);
+    background: linear-gradient(135deg, #ffffff, #e2e8f0);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .subtitle {
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: #cbd5e1;
 }
 
 .controls {
