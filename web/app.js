@@ -1371,8 +1371,10 @@ async function sendAllToComfyUI() {
 
         // 3. Send Updates
         
-        // A. LoRA Specialist API for Positive Prompt (Loaders)
-        if (fullPositive.trim()) {
+        // A. LoRA Specialist API (Handles LoRA Loaders/Stackers)
+        // We ALWAYS call this if there's a positive prompt, even with 0 loras, 
+        // to ensure existing LoRAs in the loaders are cleared.
+        if (fullPositive.trim() !== undefined) {
             const res = await fetch('/api/lm/update-lora-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1387,12 +1389,17 @@ async function sendAllToComfyUI() {
 
         // B. Generalist API for Prompt nodes (distinguish by title and color)
         const isPromptNode = node => {
+            const type = (node.comfy_class || '').toLowerCase();
+            
+            // EXCLUDE LoRA Manager nodes from the general update 
+            // because we handle them via the specialized API above.
+            if (type.includes('lora loader') || type.includes('lora stacker')) return false;
+
             const outputs = node.outputs || [];
             // Most prompt nodes output CONDITIONING
             if (outputs.includes('CONDITIONING')) return true;
             
             // Fallback for some custom nodes or string-based prompt builders
-            const type = (node.comfy_class || '').toLowerCase();
             if (type.includes('prompt') || type.includes('text_encode')) return true;
             
             return false;
