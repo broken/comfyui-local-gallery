@@ -1285,109 +1285,120 @@ async function sendAllToComfyUI() {
     els.btnSendAll.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0;"></div>';
 
     try {
-        // 1. Fetch Registry
-        const registryResponse = await fetch('/api/lm/get-registry');
+        // 1. Fetch our own Registry
+        const registryResponse = await fetch('/api/gallery/get-registry');
         const registryData = await registryResponse.json();
         if (!registryData.success) throw new Error(registryData.error || 'Failed to fetch registry');
         
-        // Registry data might be nested in .data.nodes or just .nodes depending on version
-        const nodes = (registryData.data && registryData.data.nodes) || registryData.nodes || {};
-
+        const nodes = registryData.nodes || {};
         const results = [];
 
-        // Helper to send widget update
-        const sendWidget = async (widgetNames, value, nodeTitleFilter = null) => {
+        // Helper to send widget update via Lora Manager API
+        const sendWidget = async (widgetNames, value, nodeFilter = null) => {
             if (value === null || value === undefined || value === 'Unknown' || value === '-') return;
             
             const names = Array.isArray(widgetNames) ? widgetNames : [widgetNames];
             
-            // Find nodes that have any of these widgets
             const targetNodeIds = Object.entries(nodes)
                 .filter(([id, node]) => {
-                    const hasWidget = node.widget_names && names.some(name => node.widget_names.includes(name));
+                    const widgetNamesOnNode = node.widgets || [];
+                    const hasWidget = names.some(name => widgetNamesOnNode.includes(name));
                     if (!hasWidget) return false;
                     
-                    if (nodeTitleFilter) {
-                        const title = (node.title || node.class_type || '').toLowerCase();
-                        return title.includes(nodeTitleFilter.toLowerCase());
-                    }
+                    if (nodeFilter && !nodeFilter(node)) return false;
+                    
                     return true;
                 })
                 .map(([id, node]) => id);
 
-            if (targetNodeIds.length > 0) {
-                // Send individually to ensure the correct widget name is used for each node type
-                for (const id of targetNodeIds) {
-                    const node = nodes[id];
-                    const actualWidgetName = names.find(name => node.widget_names.includes(name));
-                    
-                    if (actualWidgetName) {
-                        // Try to keep numeric values as numbers if they look like it
-                        let finalValue = value;
-                        if (!isNaN(value) && typeof value !== 'boolean' && value !== '') {
-                            finalValue = Number(value);
-                        } else {
-                            finalValue = String(value);
-                        }
+            if (targetNodeIds.length === 0) return;
 
-                        const res = await fetch('/api/lm/update-node-widget', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                widget_name: actualWidgetName,
-                                value: finalValue, 
-                                node_ids: [id] 
-                            })
-                        });
-                        results.push(await res.json());
-                    }
+            for (const id of targetNodeIds) {
+                const node = nodes[id];
+                const widgetNamesOnNode = node.widgets || [];
+                const actualWidgetName = names.find(name => widgetNamesOnNode.includes(name));
+                
+                if (actualWidgetName) {
+                    // We must stringify because Lora Manager's backend validates for string type
+                    const stringValue = String(value);
+                    if (!stringValue) continue; // Skip empty strings to avoid LM backend validation error
+
+                    const res = await fetch('/api/lm/update-node-widget', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            widget_name: actualWidgetName,
+                            value: stringValue, 
+                            node_ids: [id] 
+                        })
+                    });
+                    results.push(await res.json());
                 }
             }
         };
 
-        // 2. Send Core Parameters
-        await sendWidget(['ckpt_name', 'unet_name', 'model_name'], data.model);
-        await sendWidget(['seed', 'noise_seed'], data.seed);
-        await sendWidget('steps', data.steps);
-        await sendWidget('cfg', data.cfg);
-        await sendWidget(['sampler_name', 'sampler'], data.sampler);
-        await sendWidget(['scheduler', 'scheduler_name'], data.scheduler);
-        
-        // 3. Send Positive Prompt & LoRAs
-        let fullPositive = data.positivePrompt;
-        // Clean up "No metadata found" or similar
+        // 2. Prepare Prompts
+        let fullPositive = data.positivePrompt || '';
         if (fullPositive === 'No metadata found' || fullPositive === 'No positive prompt string found.') {
             fullPositive = '';
         }
-
         if (data.loras && data.loras.length > 0) {
             const loraSyntax = data.loras.map(l => `<lora:${l.name}:${l.weight}>`).join(' ');
             fullPositive = loraSyntax + '\n' + fullPositive;
         }
 
+        const negativePrompt = (data.negativePrompt && data.negativePrompt !== 'None detected.' && data.negativePrompt !== 'None') ? data.negativePrompt : '';
+
+        // 3. Send Updates
+        
+        // A. LoRA Specialist API for Positive Prompt (Loaders)
         if (fullPositive.trim()) {
-            // Method A: Lora Manager specialized update
-            const loraRes = await fetch('/api/lm/update-lora-code', {
+            const res = await fetch('/api/lm/update-lora-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     lora_code: fullPositive.trim(),
                     mode: 'replace',
-                    model_type: 'lora'
+                    node_ids: null // broadcast to all loaders
                 })
             });
-            results.push(await loraRes.json());
-
-            // Method B: Direct widget updates (for Prompt Selection or Positive Prompt nodes)
-            await sendWidget('selected_positive', fullPositive.trim());
-            await sendWidget('text', fullPositive.trim(), 'positive');
+            results.push(await res.json());
         }
 
-        // 4. Send Negative Prompt
-        if (data.negativePrompt && data.negativePrompt !== 'None detected.' && data.negativePrompt !== 'None') {
-            await sendWidget(['selected_negative', 'negative_prompt', 'negative'], data.negativePrompt);
-            await sendWidget('text', data.negativePrompt, 'negative');
+        // B. Generalist API for Prompt nodes (distinguish by title and color)
+        const isNegativeNode = node => {
+            const title = (node.title || '').toLowerCase();
+            const color = (node.color || '').toLowerCase();
+            const bgcolor = (node.bgcolor || '').toLowerCase();
+            
+            // Keywords
+            if (title.includes('negative')) return true;
+            
+            // Color hints (Reddish colors often used for negative)
+            // ComfyUI uses hex like #322 or #332222
+            const redHints = ['#322', '#332222', '#a00', '#ff0000', 'red'];
+            if (redHints.some(h => color.includes(h) || bgcolor.includes(h))) return true;
+            
+            return false;
+        };
+
+        if (fullPositive.trim()) {
+            await sendWidget(['text', 'string'], fullPositive.trim(), node => !isNegativeNode(node));
         }
+        
+        if (negativePrompt.trim()) {
+            await sendWidget(['text', 'string'], negativePrompt.trim(), node => isNegativeNode(node));
+        }
+
+        // C. Generalist API for KSampler parameters
+        await sendWidget(['seed', 'noise_seed'], data.seed);
+        await sendWidget('steps', data.steps);
+        await sendWidget('cfg', data.cfg);
+        await sendWidget(['sampler_name', 'sampler'], data.sampler);
+        await sendWidget(['scheduler', 'scheduler_name'], data.scheduler);
+
+        // D. Generalist API for Models
+        await sendWidget(['ckpt_name', 'unet_name', 'model_name'], data.model);
 
         // Success Feedback
         els.btnSendAll.classList.remove('loading');
