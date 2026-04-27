@@ -22,18 +22,20 @@ app.registerExtension({
 
                 button.classList.add('gallery-style-applied');
                 button.innerHTML = getGalleryIcon();
-                button.style.borderRadius = '4px';
+                button.style.borderRadius = '6px';
                 button.style.padding = '6px';
-                button.style.backgroundColor = 'var(--primary-bg)';
+                button.style.backgroundColor = '#6366f1';
                 button.style.display = 'flex';
                 button.style.alignItems = 'center';
                 button.style.justifyContent = 'center';
+                button.style.border = 'none';
+                button.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
                 
                 const svg = button.querySelector('svg');
                 if (svg) {
-                    svg.style.width = '20px';
-                    svg.style.height = '20px';
-                    svg.style.color = '#6366f1';
+                    svg.style.width = '18px';
+                    svg.style.height = '18px';
+                    svg.style.color = 'white';
                 }
             });
             
