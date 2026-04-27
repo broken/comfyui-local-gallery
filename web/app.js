@@ -1369,61 +1369,69 @@ async function sendAllToComfyUI() {
 
         const negativePrompt = (data.negativePrompt && data.negativePrompt !== 'None detected.' && data.negativePrompt !== 'None') ? data.negativePrompt : '';
 
+        // 2. Prepare Prompts (Separated)
+        const loraTags = (data.loras || []).map(l => `<lora:${l.name}:${l.weight}>`).join(' ');
+        
+        // Clean positive prompt (strip any existing lora tags)
+        let cleanPositive = (data.positivePrompt || '')
+            .replace(/<lora:[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+            
+        if (cleanPositive === 'No metadata found' || cleanPositive === 'No positive prompt string found.') {
+            cleanPositive = '';
+        }
+
         // 3. Send Updates
         
-        // A. LoRA Specialist API (Handles LoRA Loaders/Stackers)
-        // We ALWAYS call this if there's a positive prompt, even with 0 loras, 
-        // to ensure existing LoRAs in the loaders are cleared.
-        if (fullPositive.trim() !== undefined) {
-            const res = await fetch('/api/lm/update-lora-code', {
+        // A. LoRA Specialist API (Targeting ONLY LoRA nodes)
+        const loraNodeIds = Object.entries(nodes)
+            .filter(([id, node]) => {
+                const type = (node.comfy_class || '').toLowerCase();
+                return type.includes('lora loader') || type.includes('lora stacker');
+            })
+            .map(([id, node]) => id);
+
+        if (loraNodeIds.length > 0 || (data.loras && data.loras.length === 0)) {
+            // Even if we have 0 loras, we call this with loraNodeIds=null to broadcast the "clear" command
+            // or we use the specific IDs if we found them.
+            const targetIds = loraNodeIds.length > 0 ? loraNodeIds : null;
+            
+            await fetch('/api/lm/update-lora-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    lora_code: fullPositive.trim(),
+                    lora_code: loraTags,
                     mode: 'replace',
-                    node_ids: null // broadcast to all loaders
+                    node_ids: targetIds
                 })
             });
-            results.push(await res.json());
         }
 
-        // B. Generalist API for Prompt nodes (distinguish by title and color)
+        // B. Generalist API for non-LoRA Prompt nodes (distinguish by title and color)
         const isPromptNode = node => {
             const type = (node.comfy_class || '').toLowerCase();
-            
-            // EXCLUDE LoRA Manager nodes from the general update 
-            // because we handle them via the specialized API above.
             if (type.includes('lora loader') || type.includes('lora stacker')) return false;
 
             const outputs = node.outputs || [];
-            // Most prompt nodes output CONDITIONING
             if (outputs.includes('CONDITIONING')) return true;
-            
-            // Fallback for some custom nodes or string-based prompt builders
             if (type.includes('prompt') || type.includes('text_encode')) return true;
-            
             return false;
         };
 
         const isNegativeNode = node => {
             if (!isPromptNode(node)) return false;
-
             const title = (node.title || '').toLowerCase();
             const color = (node.color || '').toLowerCase();
             const bgcolor = (node.bgcolor || '').toLowerCase();
-            
-            // Keywords
             if (title.includes('negative')) return true;
-            
-            // Color hints (Reddish colors often used for negative)
             const redHints = ['#322', '#332222', '#a00', '#ff0000', 'red'];
             if (redHints.some(h => color.includes(h) || bgcolor.includes(h))) return true;
-            
             return false;
         };
 
-        if (fullPositive.trim()) {
-            await sendWidget(['text', 'string'], fullPositive.trim(), node => isPromptNode(node) && !isNegativeNode(node));
+        if (cleanPositive) {
+            await sendWidget(['text', 'string'], cleanPositive, node => isPromptNode(node) && !isNegativeNode(node));
         }
         
         if (negativePrompt.trim()) {
