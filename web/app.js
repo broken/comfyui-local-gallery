@@ -1367,7 +1367,21 @@ async function sendAllToComfyUI() {
         }
 
         // B. Generalist API for Prompt nodes (distinguish by title and color)
+        const isPromptNode = node => {
+            const outputs = node.outputs || [];
+            // Most prompt nodes output CONDITIONING
+            if (outputs.includes('CONDITIONING')) return true;
+            
+            // Fallback for some custom nodes or string-based prompt builders
+            const type = (node.comfy_class || '').toLowerCase();
+            if (type.includes('prompt') || type.includes('text_encode')) return true;
+            
+            return false;
+        };
+
         const isNegativeNode = node => {
+            if (!isPromptNode(node)) return false;
+
             const title = (node.title || '').toLowerCase();
             const color = (node.color || '').toLowerCase();
             const bgcolor = (node.bgcolor || '').toLowerCase();
@@ -1376,7 +1390,6 @@ async function sendAllToComfyUI() {
             if (title.includes('negative')) return true;
             
             // Color hints (Reddish colors often used for negative)
-            // ComfyUI uses hex like #322 or #332222
             const redHints = ['#322', '#332222', '#a00', '#ff0000', 'red'];
             if (redHints.some(h => color.includes(h) || bgcolor.includes(h))) return true;
             
@@ -1384,7 +1397,7 @@ async function sendAllToComfyUI() {
         };
 
         if (fullPositive.trim()) {
-            await sendWidget(['text', 'string'], fullPositive.trim(), node => !isNegativeNode(node));
+            await sendWidget(['text', 'string'], fullPositive.trim(), node => isPromptNode(node) && !isNegativeNode(node));
         }
         
         if (negativePrompt.trim()) {

@@ -43,7 +43,8 @@ app.registerExtension({
                     comfy_class: node.comfyClass,
                     widgets: widgetNames,
                     color: node.color,
-                    bgcolor: node.bgcolor
+                    bgcolor: node.bgcolor,
+                    outputs: Array.isArray(node.outputs) ? node.outputs.map(o => o.type) : []
                 });
             }
 
