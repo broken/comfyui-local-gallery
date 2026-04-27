@@ -306,6 +306,8 @@ function parseStandardMetadata(text) {
                 result.sampler = val;
             } else if (key === 'CFG scale') {
                 result.cfg = val;
+            } else if (key === 'Scheduler') {
+                result.scheduler = val;
             } else if (key === 'Size') {
                 result.size = val;
             } else if (key === 'Lora hashes') {
@@ -361,6 +363,7 @@ function extractComfyUIMetadata(jsonStr) {
         steps: null,
         cfg: null,
         sampler: null,
+        scheduler: null,
         cyclers: [],
         raw: null
     };
@@ -474,12 +477,14 @@ function extractComfyUIMetadata(jsonStr) {
                     if (node.inputs.steps !== undefined && result.steps === null) result.steps = node.inputs.steps;
                     if (node.inputs.cfg !== undefined && result.cfg === null) result.cfg = node.inputs.cfg;
                     if (node.inputs.sampler_name !== undefined && result.sampler === null) result.sampler = node.inputs.sampler_name;
+                    if (node.inputs.scheduler !== undefined && result.scheduler === null) result.scheduler = node.inputs.scheduler;
                 } else if (wValues && Array.isArray(wValues)) {
                     // Fallback for some formats where inputs are flat or missing
                     if (result.seed === null) result.seed = wValues[0];
                     if (result.steps === null) result.steps = wValues[2];
                     if (result.cfg === null) result.cfg = wValues[3];
                     if (result.sampler === null) result.sampler = wValues[4];
+                    if (result.scheduler === null) result.scheduler = wValues[5];
                 }
             }
 
@@ -775,6 +780,7 @@ async function parsePNG(file) {
             merged.steps = getBest('steps', null);
             merged.cfg = getBest('cfg', null);
             merged.sampler = getBest('sampler', null);
+            merged.scheduler = getBest('scheduler', null);
             merged.raw = rawJson;
             merged.parameters = promptMetadata ? promptMetadata.parameters : null;
             
@@ -1290,36 +1296,62 @@ async function sendAllToComfyUI() {
         const results = [];
 
         // Helper to send widget update
-        const sendWidget = async (widgetNames, value) => {
+        const sendWidget = async (widgetNames, value, nodeTitleFilter = null) => {
             if (value === null || value === undefined || value === 'Unknown' || value === '-') return;
             
             const names = Array.isArray(widgetNames) ? widgetNames : [widgetNames];
             
             // Find nodes that have any of these widgets
             const targetNodeIds = Object.entries(nodes)
-                .filter(([id, node]) => node.widget_names && names.some(name => node.widget_names.includes(name)))
+                .filter(([id, node]) => {
+                    const hasWidget = node.widget_names && names.some(name => node.widget_names.includes(name));
+                    if (!hasWidget) return false;
+                    
+                    if (nodeTitleFilter) {
+                        const title = (node.title || node.class_type || '').toLowerCase();
+                        return title.includes(nodeTitleFilter.toLowerCase());
+                    }
+                    return true;
+                })
                 .map(([id, node]) => id);
 
             if (targetNodeIds.length > 0) {
-                const res = await fetch('/api/lm/update-node-widget', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        widget_name: names[0], // Use first name as primary identifier
-                        value: String(value), 
-                        node_ids: targetNodeIds 
-                    })
-                });
-                results.push(await res.json());
+                // Send individually to ensure the correct widget name is used for each node type
+                for (const id of targetNodeIds) {
+                    const node = nodes[id];
+                    const actualWidgetName = names.find(name => node.widget_names.includes(name));
+                    
+                    if (actualWidgetName) {
+                        // Try to keep numeric values as numbers if they look like it
+                        let finalValue = value;
+                        if (!isNaN(value) && typeof value !== 'boolean' && value !== '') {
+                            finalValue = Number(value);
+                        } else {
+                            finalValue = String(value);
+                        }
+
+                        const res = await fetch('/api/lm/update-node-widget', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                widget_name: actualWidgetName,
+                                value: finalValue, 
+                                node_ids: [id] 
+                            })
+                        });
+                        results.push(await res.json());
+                    }
+                }
             }
         };
 
-        // 2. Send Parameters
+        // 2. Send Core Parameters
         await sendWidget(['ckpt_name', 'unet_name', 'model_name'], data.model);
-        await sendWidget('seed', data.seed);
+        await sendWidget(['seed', 'noise_seed'], data.seed);
         await sendWidget('steps', data.steps);
         await sendWidget('cfg', data.cfg);
         await sendWidget(['sampler_name', 'sampler'], data.sampler);
+        await sendWidget(['scheduler', 'scheduler_name'], data.scheduler);
         
         // 3. Send Positive Prompt & LoRAs
         let fullPositive = data.positivePrompt;
@@ -1334,6 +1366,7 @@ async function sendAllToComfyUI() {
         }
 
         if (fullPositive.trim()) {
+            // Method A: Lora Manager specialized update
             const loraRes = await fetch('/api/lm/update-lora-code', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1344,16 +1377,16 @@ async function sendAllToComfyUI() {
                 })
             });
             results.push(await loraRes.json());
+
+            // Method B: Direct widget updates (for Prompt Selection or Positive Prompt nodes)
+            await sendWidget('selected_positive', fullPositive.trim());
+            await sendWidget('text', fullPositive.trim(), 'positive');
         }
 
-        // 4. Send Negative Prompt (If detected)
+        // 4. Send Negative Prompt
         if (data.negativePrompt && data.negativePrompt !== 'None detected.' && data.negativePrompt !== 'None') {
-             // Look for CLIPTextEncode nodes that might be negative
-             // Lora Manager's update-node-widget can be used if we know the widget name (usually 'text')
-             // However, without a way to distinguish positive/negative nodes easily, 
-             // we'll rely on the user to have a dedicated negative node that we can potentially target.
-             // For now, we skip auto-sending negative to avoid overwriting positive prompts 
-             // unless we add more sophisticated node tagging.
+            await sendWidget(['selected_negative', 'negative_prompt', 'negative'], data.negativePrompt);
+            await sendWidget('text', data.negativePrompt, 'negative');
         }
 
         // Success Feedback
