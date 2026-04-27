@@ -234,8 +234,9 @@ async function init() {
 }
 
 // Helper to strip paths and extensions from model/lora names
-const normalizeName = (name) => {
+const normalizeName = (name, keepAll = false) => {
     if (!name || typeof name !== 'string') return name;
+    if (keepAll) return name.trim();
     return name.split(/[/\\]/).pop().replace(/\.safetensors$/i, '').trim();
 };
 
@@ -297,7 +298,7 @@ function parseStandardMetadata(text) {
             const val = valParts.join(':');
             
             if (key === 'Model') {
-                result.model = normalizeName(val);
+                result.model = normalizeName(val, true);
             } else if (key === 'Seed') {
                 result.seed = val;
             } else if (key === 'Steps') {
@@ -493,24 +494,24 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string' && (v.includes('/') || v.includes('\\') || v.endsWith('.safetensors')));
-                    if (strVal) customModel = normalizeName(strVal);
+                    if (strVal) customModel = normalizeName(strVal, true);
                 }
             } else if (classType.includes('Model Cycler')) {
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_model_name);
                     if (cyclerVal) {
-                        const name = normalizeName(cyclerVal.current_model_name);
+                        const name = normalizeName(cyclerVal.current_model_name, true);
                         result.cyclers.push({ type: 'model', name, hooked: isHooked, title: title || classType });
                         if (isHooked) customModel = name;
                     }
                 }
             } else if (classType === 'CheckpointLoaderSimple' || classType.includes('Checkpoint')) {
                 if (node.inputs && node.inputs.ckpt_name) {
-                    standardModel = normalizeName(node.inputs.ckpt_name);
+                    standardModel = normalizeName(node.inputs.ckpt_name, true);
                 } else if (wValues && Array.isArray(wValues)) {
                     const flatValues = wValues.flat(Infinity);
                     const strVal = flatValues.find(v => typeof v === 'string');
-                    if (strVal) standardModel = normalizeName(strVal);
+                    if (strVal) standardModel = normalizeName(strVal, true);
                 }
             }
 
@@ -521,7 +522,7 @@ function extractComfyUIMetadata(jsonStr) {
                         if (Array.isArray(item)) {
                             if (item.length > 0 && typeof item[0] === 'string' && item[0].trim().toLowerCase() !== 'none' && 
                                (item[0].includes('.safetensors') || item[0].includes('/') || item[0].includes('\\'))) {
-                                const name = normalizeName(item[0].trim());
+                                const name = normalizeName(item[0].trim(), true);
                                 const weight = item.length > 1 ? parseFloat(item[1]) : 1.0;
                                 customLoras.push({ name, weight: isNaN(weight) ? 1.0 : weight });
                             } else {
@@ -531,7 +532,7 @@ function extractComfyUIMetadata(jsonStr) {
                             const parts = item.split(',');
                             const loraName = parts[0].trim();
                             if (loraName && loraName.toLowerCase() !== 'none') {
-                                const name = normalizeName(loraName);
+                                const name = normalizeName(loraName, true);
                                 const weight = parts.length > 1 ? parseFloat(parts[1]) : 1.0;
                                 customLoras.push({ name, weight: isNaN(weight) ? 1.0 : weight });
                             }
@@ -543,7 +544,7 @@ function extractComfyUIMetadata(jsonStr) {
                 if (wValues && Array.isArray(wValues)) {
                     const cyclerVal = wValues.find(v => v && typeof v === 'object' && v.current_lora_name);
                     if (cyclerVal && cyclerVal.current_lora_name.toLowerCase() !== 'none') {
-                        const name = normalizeName(cyclerVal.current_lora_name);
+                        const name = normalizeName(cyclerVal.current_lora_name, true);
                         result.cyclers.push({ type: 'lora', name, hooked: isHooked, title: title || classType });
                         if (isHooked) {
                             // Extract weight if available in cycler
@@ -560,7 +561,7 @@ function extractComfyUIMetadata(jsonStr) {
                             for (const lora of loras) {
                                 if (lora && lora.name) {
                                     const weight = lora.strength !== undefined ? lora.strength : (lora.weight !== undefined ? lora.weight : 1.0);
-                                    customLoras.push({ name: normalizeName(lora.name), weight: parseFloat(weight) || 1.0 });
+                                    customLoras.push({ name: normalizeName(lora.name, true), weight: parseFloat(weight) || 1.0 });
                                 }
                             }
                         }
@@ -1011,7 +1012,7 @@ function updateFiltersUI() {
     models.forEach(model => {
         const option = document.createElement('option');
         option.value = model;
-        option.textContent = model;
+        option.textContent = normalizeName(model);
         els.modelFilter.appendChild(option);
     });
     
@@ -1031,7 +1032,7 @@ function updateFiltersUI() {
     loras.forEach(lora => {
         const option = document.createElement('option');
         option.value = lora;
-        option.textContent = lora;
+        option.textContent = normalizeName(lora);
         els.loraFilter.appendChild(option);
     });
     
@@ -1113,7 +1114,7 @@ function renderGallery() {
         card.className = 'image-card';
         card.onclick = () => openImageModal(img);
         
-        const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : img.data.model;
+        const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(img.data.model);
         
         // Create inner HTML
         card.innerHTML = `
@@ -1128,7 +1129,7 @@ function renderGallery() {
                 </div>
                 ${img.data.loras.length === 1 ? (() => {
                     const l = img.data.loras[0];
-                    const name = typeof l === 'string' ? l : l.name;
+                    const name = normalizeName(typeof l === 'string' ? l : l.name);
                     const weight = typeof l === 'string' ? 1.0 : l.weight;
                     const display = weight !== 1.0 ? `${name} (${weight})` : name;
                     return `<div class="card-model" title="${display}">
@@ -1174,7 +1175,7 @@ function openImageModal(img) {
     els.modalImage.src = img.url;
     els.modalFilename.textContent = img.data.name;
     
-    const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : img.data.model;
+    const shortModelName = img.data.model === 'Unknown' ? 'Unknown Pattern' : normalizeName(img.data.model);
     els.modalModel.textContent = shortModelName;
     
     if (img.data.model !== 'Unknown') {
@@ -1186,7 +1187,7 @@ function openImageModal(img) {
     // Render LoRAs
     if (img.data.loras.length > 0) {
         els.modalLoras.innerHTML = img.data.loras.map(l => {
-            const name = typeof l === 'string' ? l : l.name;
+            const name = normalizeName(typeof l === 'string' ? l : l.name);
             const weight = typeof l === 'string' ? 1.0 : l.weight;
             const display = weight !== 1.0 ? `${name} (${weight})` : name;
             return `<li class="lora-tag clickable" data-lora-name="${name}" title="${display}">${display}</li>`;
