@@ -68,15 +68,18 @@ const els = {
     modalImageContainer: document.querySelector('.modal-image-container')
 };
 
-// --- IDB Storage for Folder Caching ---
-const dbName = 'ComfyUIGalleryDB';
-const storeName = 'handles';
+// --- IDB Storage for Folder Caching & Metadata ---
+const dbName = 'ComfyUIGalleryDB_v2';
+const storeHandles = 'handles';
+const storeMetadata = 'metadata';
 
 async function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName, 1);
+        const request = indexedDB.open(dbName, 2);
         request.onupgradeneeded = (e) => {
-            e.target.result.createObjectStore(storeName);
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(storeHandles)) db.createObjectStore(storeHandles);
+            if (!db.objectStoreNames.contains(storeMetadata)) db.createObjectStore(storeMetadata);
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -85,23 +88,34 @@ async function initDB() {
 
 async function saveHandle(handle) {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        const req = store.put(handle, 'lastDirectory');
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-    });
+    const tx = db.transaction(storeHandles, 'readwrite');
+    tx.objectStore(storeHandles).put(handle, 'lastDirectory');
 }
 
 async function loadHandle() {
     const db = await initDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const req = store.get('lastDirectory');
+    const tx = db.transaction(storeHandles, 'readonly');
+    return new Promise((resolve) => {
+        const req = tx.objectStore(storeHandles).get('lastDirectory');
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        req.onerror = () => resolve(null);
+    });
+}
+
+async function saveToDB(imgData) {
+    const db = await initDB();
+    const tx = db.transaction(storeMetadata, 'readwrite');
+    // Store metadata keyed by filename
+    tx.objectStore(storeMetadata).put(imgData, imgData.data.name);
+}
+
+async function loadFromDB(filename) {
+    const db = await initDB();
+    const tx = db.transaction(storeMetadata, 'readonly');
+    return new Promise((resolve) => {
+        const req = tx.objectStore(storeMetadata).get(filename);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
     });
 }
 // ------------------------------------
@@ -934,33 +948,47 @@ async function scanDirectory(dirHandle) {
 }
 
 async function processBatch(filesBatch, silent = false) {
-    const parsePromises = filesBatch.map(async file => {
+    const results = await Promise.all(filesBatch.map(async file => {
+        // Check cache first
+        const cached = await loadFromDB(file.name);
+        
+        if (cached && cached.lastModified === file.lastModified) {
+            // URL object URLs expire, so we still need to create a new one
+            cached.url = URL.createObjectURL(file);
+            // Re-add to global sets for this session
+            if (cached.data.model && cached.data.model !== 'Unknown') {
+                state.models.add(cached.data.model);
+            }
+            cached.data.loras.forEach(l => state.loras.add(typeof l === 'string' ? l : l.name));
+            return cached;
+        }
+
         const url = URL.createObjectURL(file);
         const metadata = await parsePNG(file);
+        metadata.name = file.name; // Ensure name is set
         
         // Add to global sets
         if (metadata.model && metadata.model !== 'Unknown') {
-            // Find existing model with same name but maybe different casing
             const existingModel = Array.from(state.models).find(m => m.toLowerCase() === metadata.model.toLowerCase());
             if (!existingModel) {
                 state.models.add(metadata.model);
             } else {
-                // If the new one is "better" (e.g. has more uppercase/standard casing), we could update it
-                // but for now, just keep the first one found to avoid churn.
                 metadata.model = existingModel;
             }
         }
         metadata.loras.forEach(l => state.loras.add(typeof l === 'string' ? l : l.name));
         
-        return {
+        const imageData = {
             file,
             url,
             lastModified: file.lastModified,
             data: metadata
         };
-    });
+        
+        await saveToDB(imageData);
+        return imageData;
+    }));
     
-    const results = await Promise.all(parsePromises);
     state.images.push(...results);
     if (!silent) els.statusText.textContent = `Found ${state.images.length} images... please wait...`;
 }
