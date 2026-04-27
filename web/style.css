@@ -59,12 +59,29 @@ body {
     margin: 0 auto;
 }
 
+.logo-area {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logo-icon {
+    color: var(--accent-color);
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.3));
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+}
+
 .logo-area h1 {
     font-size: 1.5rem;
     font-weight: 700;
     background: linear-gradient(135deg, #ffffff, #e2e8f0);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    line-height: 1.2;
 }
 
 .subtitle {
