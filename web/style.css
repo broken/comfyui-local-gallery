@@ -126,6 +126,43 @@ button {
     transform: translateY(0);
 }
 
+.secondary-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    font-size: 0.85rem;
+    transition: var(--transition-fast);
+}
+
+.secondary-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-color);
+    transform: translateY(-1px);
+}
+
+.secondary-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#clear-filters-btn svg {
+    color: var(--text-secondary);
+}
+
+#clear-filters-btn:hover svg {
+    color: var(--accent-color);
+}
+
 #send-all-btn {
     transition: all 0.2s ease;
 }

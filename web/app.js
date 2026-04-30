@@ -39,6 +39,7 @@ const els = {
     resultsCount: document.getElementById('results-count'),
     loadingSpinner: document.getElementById('loading-spinner'),
     statusText: document.getElementById('status-text'),
+    btnClearFilters: document.getElementById('clear-filters-btn'),
     
     // Modal
     modal: document.getElementById('image-modal'),
@@ -144,6 +145,7 @@ async function init() {
     els.modelFilter.addEventListener('change', handleFilterChange);
     els.loraFilter.addEventListener('change', handleFilterChange);
     els.sortFilter.addEventListener('change', handleFilterChange);
+    els.btnClearFilters.addEventListener('click', clearFilters);
     els.autoUpdateCb.addEventListener('change', toggleAutoUpdate);
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnPrev.addEventListener('click', () => navigateImage(-1));
@@ -840,6 +842,7 @@ async function processDirectory(dirHandle) {
     els.loraFilter.disabled = false;
     els.sortFilter.disabled = false;
     els.autoUpdateCb.disabled = false;
+    els.btnClearFilters.disabled = false;
     els.btnSelect.disabled = false;
     
     // Restore default button text in case it was the "Re-open" button
@@ -1072,10 +1075,10 @@ function handleFilterChange() {
                               img.data.name.toLowerCase().includes(state.searchQuery) ||
                               img.data.model.toLowerCase().includes(state.searchQuery) ||
                                img.data.loras.some(l => (typeof l === 'string' ? l : l.name).toLowerCase().includes(state.searchQuery));
-                              
+                               
         // Specific Filename Filter
         const matchesFilename = !state.filenameQuery || img.data.name.toLowerCase().includes(state.filenameQuery);
-                              
+                               
         // Model Filter (exact match on full path inside state)
         const matchesModel = !state.selectedModel || img.data.model === state.selectedModel;
         
@@ -1101,6 +1104,16 @@ function handleFilterChange() {
     });
     
     renderGallery();
+}
+
+function clearFilters() {
+    els.searchInput.value = '';
+    els.filenameFilter.value = '';
+    els.modelFilter.value = '';
+    els.loraFilter.value = '';
+    // Note: We specifically do NOT reset els.sortFilter.value as requested
+    
+    handleFilterChange();
 }
 
 function renderGallery() {
