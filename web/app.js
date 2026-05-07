@@ -414,28 +414,6 @@ function extractBalancedJson(text, startIdx) {
     return null;
 }
 
-// Helper to decode EXIF text (handles UNICODE/UTF-16 and ASCII headers)
-function decodeExifText(buffer) {
-    if (buffer.byteLength < 8) return null;
-    const view = new Uint8Array(buffer);
-    const decoderUtf8 = new TextDecoder('utf-8');
-    const prefix = decoderUtf8.decode(view.slice(0, 8));
-
-    if (prefix.includes('UNICODE')) {
-        const data = view.slice(8);
-        // Try Big-Endian first (common in EXIF), fallback to Little-Endian
-        let decoded = new TextDecoder('utf-16be').decode(data);
-        // Heuristic: if we see lots of nulls or nonsense, try LE
-        if (decoded.includes('\u0000') || decoded.length < 2) {
-            decoded = new TextDecoder('utf-16le').decode(data);
-        }
-        return decoded.replace(/\0/g, '').trim();
-    } else if (prefix.includes('ASCII')) {
-        return decoderUtf8.decode(view.slice(8)).replace(/\0/g, '').trim();
-    }
-    
-    return null;
-}
 
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
 function extractComfyUIMetadata(jsonStr) {
@@ -966,19 +944,44 @@ async function parseWebP(file) {
                     }
                 }
 
-                // 3. Fallback/A1111: Decode as EXIF text and check for standard parameters
-                const exifText = decodeExifText(payload);
-                if (exifText && !exifText.trim().startsWith('{')) {
-                    const standard = parseStandardMetadata(exifText);
-                    if (standard && (standard.positivePrompt || standard.seed)) {
-                        if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
-                        // Merge A1111 data into promptMetadata, giving priority to A1111 for these fields
-                        Object.assign(promptMetadata, standard);
-                        promptMetadata.parameters = standard;
-                        promptMetadata.priorityResult = true;
+                // 3. Search for A1111 UserComment (UNICODE)
+                const unicodeIdx = payloadStr.indexOf('UNICODE');
+                if (unicodeIdx !== -1) {
+                    const data = new Uint8Array(payload).slice(unicodeIdx + 8);
+                    // Decode as UTF-16 (Try BE then LE)
+                    let decoded = new TextDecoder('utf-16be').decode(data);
+                    if (decoded.includes('\u0000') || decoded.length < 2) {
+                        decoded = new TextDecoder('utf-16le').decode(data);
                     }
-                } else if (!workflowMetadata && !promptMetadata) {
-                    // 4. Last resort: just look for any JSON in the chunk if we found nothing else
+                    const exifText = decoded.replace(/\0/g, '').trim();
+                    if (exifText && !exifText.startsWith('{')) {
+                        const standard = parseStandardMetadata(exifText);
+                        if (standard && (standard.positivePrompt || standard.seed)) {
+                            if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                            Object.assign(promptMetadata, standard);
+                            promptMetadata.parameters = standard;
+                            promptMetadata.priorityResult = true;
+                        }
+                    }
+                }
+
+                // 4. Search for A1111 UserComment (ASCII)
+                const asciiIdx = payloadStr.indexOf('ASCII');
+                if (asciiIdx !== -1 && unicodeIdx === -1) {
+                    const exifText = payloadStr.substring(asciiIdx + 8).replace(/\0/g, '').trim();
+                    if (exifText && !exifText.startsWith('{')) {
+                        const standard = parseStandardMetadata(exifText);
+                        if (standard && (standard.positivePrompt || standard.seed)) {
+                            if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                            Object.assign(promptMetadata, standard);
+                            promptMetadata.parameters = standard;
+                            promptMetadata.priorityResult = true;
+                        }
+                    }
+                }
+
+                // 5. Last resort: just look for any JSON in the chunk if we found nothing else
+                if (!workflowMetadata && !promptMetadata) {
                     const potential = extractBalancedJson(payloadStr, 0);
                     if (potential) {
                         try {
