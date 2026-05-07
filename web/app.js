@@ -48,6 +48,7 @@ const els = {
     loadingSpinner: document.getElementById('loading-spinner'),
     statusText: document.getElementById('status-text'),
     btnClearFilters: document.getElementById('clear-filters-btn'),
+    btnClearSearch: document.getElementById('clear-search-btn'),
     
     // Modal
     modal: document.getElementById('image-modal'),
@@ -154,6 +155,7 @@ async function init() {
     els.loraFilter.addEventListener('change', handleFilterChange);
     els.sortFilter.addEventListener('change', handleFilterChange);
     els.btnClearFilters.addEventListener('click', clearFilters);
+    els.btnClearSearch.addEventListener('click', clearSearch);
     els.autoUpdateCb.addEventListener('change', toggleAutoUpdate);
     els.btnDelete.addEventListener('click', deleteImage);
     els.btnPrev.addEventListener('click', () => navigateImage(-1));
@@ -1201,6 +1203,13 @@ function handleFilterChange() {
     state.selectedModel = els.modelFilter.value;
     state.selectedLora = els.loraFilter.value;
     state.sortBy = els.sortFilter.value;
+
+    // Toggle clear search button visibility
+    if (state.searchQuery) {
+        els.btnClearSearch.classList.add('visible');
+    } else {
+        els.btnClearSearch.classList.remove('visible');
+    }
     
     state.filteredImages = state.images.filter(img => {
         // Global Search Filter
@@ -1246,6 +1255,11 @@ function clearFilters() {
     els.loraFilter.value = '';
     // Note: We specifically do NOT reset els.sortFilter.value as requested
     
+    handleFilterChange();
+}
+
+function clearSearch() {
+    els.searchInput.value = '';
     handleFilterChange();
 }
 

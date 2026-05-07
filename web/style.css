@@ -194,11 +194,38 @@ button {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--glass-border);
     color: var(--text-primary);
-    padding: 0.6rem 1rem 0.6rem 2.2rem;
+    padding: 0.6rem 2.2rem 0.6rem 2.2rem;
     border-radius: var(--border-radius-sm);
     font-size: 0.95rem;
     width: 250px;
     transition: var(--transition-fast);
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 50%;
+    transition: var(--transition-fast);
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+}
+
+.clear-search-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.clear-search-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .search-box input:focus {
