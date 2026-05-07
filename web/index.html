@@ -38,6 +38,9 @@
                             Auto-update gallery (15s)
                         </label>
                     </div>
+                    <button id="settings-btn" class="secondary-btn" title="Gallery Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    </button>
                 </div>
             </div>
 
@@ -210,6 +213,66 @@
                                 <pre id="modal-raw-json"></pre>
                             </details>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content glass-panel" style="max-width: 500px; height: auto; max-height: 80vh;">
+                <button id="close-settings-btn" class="close-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <div style="padding: 2rem;">
+                    <h2 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-color);"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        Gallery Settings
+                    </h2>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div class="filter-group" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <label style="font-size: 0.9rem;">Max Columns</label>
+                            <select id="setting-max-columns" style="width: 100%; max-width: none;">
+                                <option value="0">Auto (Fill available space)</option>
+                                <option value="1">1 Column</option>
+                                <option value="2">2 Columns</option>
+                                <option value="3">3 Columns</option>
+                                <option value="4">4 Columns</option>
+                                <option value="5">5 Columns</option>
+                                <option value="6">6 Columns</option>
+                                <option value="8">8 Columns</option>
+                                <option value="10">10 Columns</option>
+                                <option value="12">12 Columns</option>
+                            </select>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Limits the number of columns on wide screens.</span>
+                        </div>
+
+                        <div class="filter-group" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <label style="font-size: 0.9rem;">Preview Minimum Width</label>
+                            <div style="display: flex; align-items: center; gap: 1rem; width: 100%;">
+                                <input type="range" id="setting-item-width" min="150" max="600" step="10" style="flex: 1; accent-color: var(--accent-color);">
+                                <span id="setting-item-width-val" style="font-size: 0.9rem; font-weight: 600; min-width: 50px;">280px</span>
+                            </div>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Smallest size a preview can be before wrapping.</span>
+                        </div>
+
+                        <div class="filter-group" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                            <label style="font-size: 0.9rem;">Preview Aspect Ratio</label>
+                            <select id="setting-aspect-ratio" style="width: 100%; max-width: none;">
+                                <option value="1">Square (1:1)</option>
+                                <option value="1.333">4:3</option>
+                                <option value="1.5">3:2</option>
+                                <option value="1.777">16:9</option>
+                                <option value="0.75">3:4 (Portrait)</option>
+                                <option value="0.666">2:3 (Portrait)</option>
+                                <option value="auto">Original (Variable height)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+                        <button id="save-settings-btn" class="primary-btn">Save & Apply</button>
                     </div>
                 </div>
             </div>

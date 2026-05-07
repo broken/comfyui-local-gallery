@@ -31,7 +31,14 @@ const state = {
     zoom: 1,
     pan: { x: 0, y: 0 },
     isDragging: false,
-    lastMousePos: { x: 0, y: 0 }
+    lastMousePos: { x: 0, y: 0 },
+
+    // Settings
+    settings: {
+        maxColumns: 0,
+        itemMinWidth: 280,
+        aspectRatio: '1'
+    }
 };
 
 // DOM Elements
@@ -75,7 +82,17 @@ const els = {
     btnCopyNegative: document.getElementById('copy-negative-btn'),
     btnSendAll: document.getElementById('send-all-btn'),
     modalSidebar: document.querySelector('.modal-sidebar'),
-    modalImageContainer: document.querySelector('.modal-image-container')
+    modalImageContainer: document.querySelector('.modal-image-container'),
+
+    // Settings UI
+    settingsBtn: document.getElementById('settings-btn'),
+    settingsModal: document.getElementById('settings-modal'),
+    btnCloseSettings: document.getElementById('close-settings-btn'),
+    btnSaveSettings: document.getElementById('save-settings-btn'),
+    settingMaxColumns: document.getElementById('setting-max-columns'),
+    settingItemWidth: document.getElementById('setting-item-width'),
+    settingItemWidthVal: document.getElementById('setting-item-width-val'),
+    settingAspectRatio: document.getElementById('setting-aspect-ratio')
 };
 
 // --- IDB Storage for Folder Caching & Metadata ---
@@ -164,6 +181,17 @@ async function init() {
     els.btnCopyNegative.addEventListener('click', () => copyToClipboard(els.modalNegative.textContent, els.btnCopyNegative));
     els.btnSendAll.addEventListener('click', sendAllToComfyUI);
     els.btnCloseModal.addEventListener('click', closeModal);
+
+    // Settings Listeners
+    els.settingsBtn.addEventListener('click', openSettings);
+    els.btnCloseSettings.addEventListener('click', closeSettings);
+    els.btnSaveSettings.addEventListener('click', saveAndApplySettings);
+    els.settingItemWidth.addEventListener('input', (e) => {
+        els.settingItemWidthVal.textContent = `${e.target.value}px`;
+    });
+    
+    // Load Saved Settings
+    loadSettings();
     
     // Filter from Modal
     els.modalModel.addEventListener('click', () => {
@@ -200,6 +228,9 @@ async function init() {
     });
     els.modal.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) closeModal();
+    });
+    els.settingsModal.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) closeSettings();
     });
 
     // Zoom and Pan Listeners
@@ -1748,3 +1779,64 @@ function resetZoom() {
 
 // Boot
 document.addEventListener('DOMContentLoaded', init);
+
+// --- Settings Management ---
+function openSettings() {
+    els.settingMaxColumns.value = state.settings.maxColumns;
+    els.settingItemWidth.value = state.settings.itemMinWidth;
+    els.settingItemWidthVal.textContent = `${state.settings.itemMinWidth}px`;
+    els.settingAspectRatio.value = state.settings.aspectRatio;
+    els.settingsModal.classList.remove('hidden');
+}
+
+function closeSettings() {
+    els.settingsModal.classList.add('hidden');
+}
+
+function saveAndApplySettings() {
+    state.settings.maxColumns = parseInt(els.settingMaxColumns.value);
+    state.settings.itemMinWidth = parseInt(els.settingItemWidth.value);
+    state.settings.aspectRatio = els.settingAspectRatio.value;
+    
+    localStorage.setItem('gallery_settings', JSON.stringify(state.settings));
+    applySettings();
+    closeSettings();
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('gallery_settings');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            state.settings = { ...state.settings, ...parsed };
+        } catch (e) {
+            console.warn("Failed to parse settings", e);
+        }
+    }
+    applySettings();
+}
+
+function applySettings() {
+    const root = document.documentElement;
+    const { maxColumns, itemMinWidth, aspectRatio } = state.settings;
+    
+    // Grid Columns
+    if (maxColumns === 0) {
+        root.style.setProperty('--grid-columns', 'auto-fill');
+    } else {
+        // To limit max columns while still being responsive on small screens,
+        // we use auto-fill but ensure the item width doesn't get too small
+        // or we use repeat(auto-fill, minmax(max(min-width, calc(100%/max-cols - gap)), 1fr))
+        const gap = '1.5rem';
+        root.style.setProperty('--grid-columns', `repeat(auto-fill, minmax(max(${itemMinWidth}px, calc(100% / ${maxColumns} - ${gap})), 1fr))`);
+        
+        // Actually, the above repeat() might be invalid syntax for repeat().
+        // Let's use a simpler approach:
+        if (maxColumns > 0) {
+             root.style.setProperty('--grid-columns', `repeat(auto-fill, minmax(max(${itemMinWidth}px, calc((100% - (${maxColumns - 1} * ${gap})) / ${maxColumns})), 1fr))`);
+        }
+    }
+    
+    root.style.setProperty('--grid-item-min-width', `${itemMinWidth}px`);
+    root.style.setProperty('--grid-aspect-ratio', aspectRatio);
+}

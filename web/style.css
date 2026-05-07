@@ -13,6 +13,11 @@
     --border-radius-sm: 6px;
     --transition-fast: 0.2s ease;
     --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Grid Settings */
+    --grid-columns: auto-fill;
+    --grid-item-min-width: 280px;
+    --grid-aspect-ratio: 1;
 }
 
 * {
@@ -320,7 +325,7 @@ main {
 
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(var(--grid-columns), minmax(var(--grid-item-min-width), 1fr));
     gap: 1.5rem;
 }
 
@@ -349,7 +354,7 @@ main {
     cursor: pointer;
     transition: var(--transition-smooth);
     border: 1px solid var(--glass-border);
-    aspect-ratio: 1; /* Square by default for the grid */
+    aspect-ratio: var(--grid-aspect-ratio);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
