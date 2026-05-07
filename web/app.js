@@ -434,12 +434,7 @@ function decodeExifText(buffer) {
         return decoderUtf8.decode(view.slice(8)).replace(/\0/g, '').trim();
     }
     
-    // Fallback: search for first { and decode from there
-    const str = decoderUtf8.decode(view);
-    const start = str.indexOf('{');
-    if (start !== -1) return str.substring(start);
-
-    return str.trim();
+    return null;
 }
 
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
@@ -973,7 +968,7 @@ async function parseWebP(file) {
 
                 // 3. Fallback/A1111: Decode as EXIF text and check for standard parameters
                 const exifText = decodeExifText(payload);
-                if (exifText) {
+                if (exifText && !exifText.trim().startsWith('{')) {
                     const standard = parseStandardMetadata(exifText);
                     if (standard && (standard.positivePrompt || standard.seed)) {
                         if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
@@ -981,6 +976,18 @@ async function parseWebP(file) {
                         Object.assign(promptMetadata, standard);
                         promptMetadata.parameters = standard;
                         promptMetadata.priorityResult = true;
+                    }
+                } else if (!workflowMetadata && !promptMetadata) {
+                    // 4. Last resort: just look for any JSON in the chunk if we found nothing else
+                    const potential = extractBalancedJson(payloadStr, 0);
+                    if (potential) {
+                        try {
+                            const extracted = extractComfyUIMetadata(potential);
+                            if (extracted.positivePrompt !== 'No positive prompt string found.') {
+                                promptMetadata = extracted;
+                                rawJson.prompt = extracted.raw;
+                            }
+                        } catch (e) {}
                     }
                 }
             }
