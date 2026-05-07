@@ -1,4 +1,12 @@
 // App State
+const SUPPORTED_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg'];
+
+function isSupportedImage(filename) {
+    if (!filename) return false;
+    const lower = filename.toLowerCase();
+    return SUPPORTED_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
 const state = {
     images: [], // { file, url, data: { name, model, loras, prompt, raw } }
     filteredImages: [],
@@ -630,6 +638,47 @@ function extractComfyUIMetadata(jsonStr) {
     return result;
 }
 
+// Helper to merge and finalize metadata from different sources (prompt/workflow chunks)
+function finalizeMetadata(defaultData, promptMetadata, workflowMetadata, rawJson) {
+    const merged = { ...defaultData };
+    
+    const getBest = (key, defaultVal) => {
+        // If we have a priority result (e.g. from 'parameters' chunk), trust it globally
+        if (promptMetadata && promptMetadata.priorityResult && promptMetadata[key]) {
+            if (key === 'loras' && promptMetadata[key].length > 0) return promptMetadata[key];
+            if (key !== 'loras' && promptMetadata[key] !== defaultVal) return promptMetadata[key];
+        }
+
+        let vP = promptMetadata ? promptMetadata[key] : null;
+        let vW = workflowMetadata ? workflowMetadata[key] : null;
+        
+        if (key === 'loras') {
+            const combined = new Set();
+            (vP || []).forEach(l => combined.add(JSON.stringify(l)));
+            (vW || []).forEach(l => combined.add(JSON.stringify(l)));
+            return Array.from(combined).map(l => JSON.parse(l));
+        }
+        
+        if (vP && vP !== defaultVal) return vP;
+        if (vW && vW !== defaultVal) return vW;
+        return defaultVal;
+    };
+
+    merged.model = getBest('model', 'Unknown');
+    merged.loras = getBest('loras', []);
+    merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
+    merged.negativePrompt = getBest('negativePrompt', 'None detected');
+    merged.seed = getBest('seed', null);
+    merged.steps = getBest('steps', null);
+    merged.cfg = getBest('cfg', null);
+    merged.sampler = getBest('sampler', null);
+    merged.scheduler = getBest('scheduler', null);
+    merged.raw = rawJson;
+    merged.parameters = promptMetadata ? promptMetadata.parameters : null;
+    
+    return merged;
+}
+
 // Parse PNG chunks
 // Reads ArrayBuffer of a file to extract tEXt/iTXt chunks containing prompt data
 async function parsePNG(file) {
@@ -772,45 +821,111 @@ async function parsePNG(file) {
         }
 
         if (promptMetadata || workflowMetadata) {
-            const merged = { ...defaultData };
-            
-            const getBest = (key, defaultVal) => {
-                // If we have a priority result (from 'parameters' chunk), trust it globally
-                if (promptMetadata && promptMetadata.priorityResult && promptMetadata[key]) {
-                    if (key === 'loras' && promptMetadata[key].length > 0) return promptMetadata[key];
-                    if (key !== 'loras' && promptMetadata[key] !== defaultVal) return promptMetadata[key];
-                }
-
-                let vP = promptMetadata ? promptMetadata[key] : null;
-                let vW = workflowMetadata ? workflowMetadata[key] : null;
-                
-                if (key === 'loras') {
-                    const combined = new Set([...(vP || []), ...(vW || [])]);
-                    return Array.from(combined);
-                }
-                
-                if (vP && vP !== defaultVal) return vP;
-                if (vW && vW !== defaultVal) return vW;
-                return defaultVal;
-            };
-
-            merged.model = getBest('model', 'Unknown');
-            merged.loras = getBest('loras', []);
-            merged.positivePrompt = getBest('positivePrompt', 'No metadata found');
-            merged.negativePrompt = getBest('negativePrompt', 'None detected');
-            merged.seed = getBest('seed', null);
-            merged.steps = getBest('steps', null);
-            merged.cfg = getBest('cfg', null);
-            merged.sampler = getBest('sampler', null);
-            merged.scheduler = getBest('scheduler', null);
-            merged.raw = rawJson;
-            merged.parameters = promptMetadata ? promptMetadata.parameters : null;
-            
-            return merged;
+            return finalizeMetadata(defaultData, promptMetadata, workflowMetadata, rawJson);
         }
         
     } catch (e) {
         console.warn(`Failed to parse PNG metadata for ${file.name}`, e);
+    }
+    
+    return defaultData;
+}
+
+// Parse WebP chunks (RIFF)
+async function parseWebP(file) {
+    const defaultData = { 
+        name: file.name, 
+        model: 'Unknown', 
+        loras: [], 
+        positivePrompt: 'No metadata found', 
+        negativePrompt: 'No metadata found', 
+        raw: null,
+        parameters: null
+    };
+    
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const view = new DataView(arrayBuffer);
+        const decoder = new TextDecoder('utf-8');
+        
+        // Check RIFF and WEBP signature
+        if (decoder.decode(arrayBuffer.slice(0, 4)) !== 'RIFF' || 
+            decoder.decode(arrayBuffer.slice(8, 12)) !== 'WEBP') {
+            return defaultData;
+        }
+
+        let offset = 12;
+        let promptMetadata = null;
+        let workflowMetadata = null;
+        let rawJson = {};
+
+        while (offset < arrayBuffer.byteLength) {
+            const chunkType = decoder.decode(arrayBuffer.slice(offset, offset + 4));
+            const chunkSize = view.getUint32(offset + 4, true);
+            
+            // EXIF and XMP are the most common places for ComfyUI/A1111 metadata in WebP
+            if (chunkType === 'EXIF' || chunkType === 'XMP ') {
+                const payload = arrayBuffer.slice(offset + 8, offset + 8 + chunkSize);
+                const payloadStr = decoder.decode(payload);
+                
+                // Try to find JSON-like structures which ComfyUI uses
+                const startIdx = payloadStr.indexOf('{');
+                const endIdx = payloadStr.lastIndexOf('}');
+                
+                if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                    const potentialJson = payloadStr.substring(startIdx, endIdx + 1);
+                    try {
+                        const parsed = JSON.parse(potentialJson);
+                        // Case 1: Standard ComfyUI format { "prompt": {...}, "workflow": {...} }
+                        if (parsed.prompt || parsed.workflow) {
+                            if (parsed.prompt) {
+                                promptMetadata = extractComfyUIMetadata(JSON.stringify(parsed.prompt));
+                                rawJson.prompt = parsed.prompt;
+                            }
+                            if (parsed.workflow) {
+                                workflowMetadata = extractComfyUIMetadata(JSON.stringify(parsed.workflow));
+                                rawJson.workflow = parsed.workflow;
+                            }
+                        } else {
+                            // Case 2: The chunk is itself a ComfyUI prompt/workflow JSON
+                            const extracted = extractComfyUIMetadata(potentialJson);
+                            if (extracted.positivePrompt !== 'No positive prompt string found.') {
+                                if (!promptMetadata) promptMetadata = extracted;
+                                if (!rawJson.prompt) rawJson.prompt = parsed;
+                            }
+                        }
+                    } catch (e) {
+                        // Case 3: Not JSON, try A1111 standard metadata format
+                        const standard = parseStandardMetadata(payloadStr);
+                        if (standard) {
+                            if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                            Object.assign(promptMetadata, standard);
+                            promptMetadata.parameters = standard;
+                            promptMetadata.priorityResult = true;
+                        }
+                    }
+                } else {
+                    // No JSON found, try fallback to A1111 standard metadata on the whole chunk string
+                    const standard = parseStandardMetadata(payloadStr);
+                    if (standard) {
+                        if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                        Object.assign(promptMetadata, standard);
+                        promptMetadata.parameters = standard;
+                        promptMetadata.priorityResult = true;
+                    }
+                }
+            }
+            
+            // WebP chunks are padded to even size
+            offset += 8 + chunkSize + (chunkSize % 2);
+        }
+
+        if (promptMetadata || workflowMetadata) {
+            return finalizeMetadata(defaultData, promptMetadata, workflowMetadata, rawJson);
+        }
+        
+    } catch (e) {
+        console.warn(`Failed to parse WebP metadata for ${file.name}`, e);
     }
     
     return defaultData;
@@ -886,7 +1001,7 @@ async function checkDirectoryForChanges() {
         let foundNames = new Set();
         
         for await (const entry of state.currentDirHandle.values()) {
-            if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.png')) {
+            if (entry.kind === 'file' && isSupportedImage(entry.name)) {
                 foundNames.add(entry.name);
                 if (!currentFileNames.has(entry.name)) {
                     const file = await entry.getFile();
@@ -959,7 +1074,7 @@ async function scanDirectory(dirHandle) {
     let filesBatch = [];
     
     for await (const entry of dirHandle.values()) {
-        if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.png')) {
+        if (entry.kind === 'file' && isSupportedImage(entry.name)) {
             const file = await entry.getFile();
             filesBatch.push(file);
             
@@ -993,7 +1108,25 @@ async function processBatch(filesBatch, silent = false) {
         }
 
         const url = URL.createObjectURL(file);
-        const metadata = await parsePNG(file);
+        
+        let metadata;
+        if (file.name.toLowerCase().endsWith('.png')) {
+            metadata = await parsePNG(file);
+        } else if (file.name.toLowerCase().endsWith('.webp')) {
+            metadata = await parseWebP(file);
+        } else {
+            // Default for other image types (jpg/jpeg) - basic support without specialized parser for now
+            metadata = { 
+                name: file.name, 
+                model: 'Unknown', 
+                loras: [], 
+                positivePrompt: 'No metadata found', 
+                negativePrompt: 'No metadata found', 
+                raw: null,
+                parameters: null
+            };
+        }
+        
         metadata.name = file.name; // Ensure name is set
         
         // Add to global sets
