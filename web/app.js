@@ -396,6 +396,52 @@ function parseStandardMetadata(text) {
     return result;
 }
 
+// Helper to extract a balanced JSON string from a larger text
+function extractBalancedJson(text, startIdx) {
+    if (startIdx === -1) return null;
+    let depth = 0;
+    let firstBrace = text.indexOf('{', startIdx);
+    if (firstBrace === -1) return null;
+
+    for (let i = firstBrace; i < text.length; i++) {
+        if (text[i] === '{') depth++;
+        else if (text[i] === '}') depth--;
+
+        if (depth === 0) {
+            return text.substring(firstBrace, i + 1);
+        }
+    }
+    return null;
+}
+
+// Helper to decode EXIF text (handles UNICODE/UTF-16 and ASCII headers)
+function decodeExifText(buffer) {
+    if (buffer.byteLength < 8) return null;
+    const view = new Uint8Array(buffer);
+    const decoderUtf8 = new TextDecoder('utf-8');
+    const prefix = decoderUtf8.decode(view.slice(0, 8));
+
+    if (prefix.includes('UNICODE')) {
+        const data = view.slice(8);
+        // Try Big-Endian first (common in EXIF), fallback to Little-Endian
+        let decoded = new TextDecoder('utf-16be').decode(data);
+        // Heuristic: if we see lots of nulls or nonsense, try LE
+        if (decoded.includes('\u0000') || decoded.length < 2) {
+            decoded = new TextDecoder('utf-16le').decode(data);
+        }
+        return decoded.replace(/\0/g, '').trim();
+    } else if (prefix.includes('ASCII')) {
+        return decoderUtf8.decode(view.slice(8)).replace(/\0/g, '').trim();
+    }
+    
+    // Fallback: search for first { and decode from there
+    const str = decoderUtf8.decode(view);
+    const start = str.indexOf('{');
+    if (start !== -1) return str.substring(start);
+
+    return str.trim();
+}
+
 // Extract specific nodes from ComfyUI Workflow/Prompt JSON
 function extractComfyUIMetadata(jsonStr) {
     const result = {
@@ -901,47 +947,37 @@ async function parseWebP(file) {
                 const payload = arrayBuffer.slice(offset + 8, offset + 8 + chunkSize);
                 const payloadStr = decoder.decode(payload);
                 
-                // Try to find JSON-like structures which ComfyUI uses
-                const startIdx = payloadStr.indexOf('{');
-                const endIdx = payloadStr.lastIndexOf('}');
-                
-                if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                    const potentialJson = payloadStr.substring(startIdx, endIdx + 1);
-                    try {
-                        const parsed = JSON.parse(potentialJson);
-                        // Case 1: Standard ComfyUI format { "prompt": {...}, "workflow": {...} }
-                        if (parsed.prompt || parsed.workflow) {
-                            if (parsed.prompt) {
-                                promptMetadata = extractComfyUIMetadata(JSON.stringify(parsed.prompt));
-                                rawJson.prompt = parsed.prompt;
-                            }
-                            if (parsed.workflow) {
-                                workflowMetadata = extractComfyUIMetadata(JSON.stringify(parsed.workflow));
-                                rawJson.workflow = parsed.workflow;
-                            }
-                        } else {
-                            // Case 2: The chunk is itself a ComfyUI prompt/workflow JSON
-                            const extracted = extractComfyUIMetadata(potentialJson);
-                            if (extracted.positivePrompt !== 'No positive prompt string found.') {
-                                if (!promptMetadata) promptMetadata = extracted;
-                                if (!rawJson.prompt) rawJson.prompt = parsed;
-                            }
-                        }
-                    } catch (e) {
-                        // Case 3: Not JSON, try A1111 standard metadata format
-                        const standard = parseStandardMetadata(payloadStr);
-                        if (standard) {
-                            if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
-                            Object.assign(promptMetadata, standard);
-                            promptMetadata.parameters = standard;
-                            promptMetadata.priorityResult = true;
-                        }
+                // 1. Search for Workflow: markers
+                const workflowIdx = payloadStr.indexOf('Workflow:');
+                if (workflowIdx !== -1) {
+                    const potential = extractBalancedJson(payloadStr, workflowIdx);
+                    if (potential) {
+                        try {
+                            workflowMetadata = extractComfyUIMetadata(potential);
+                            rawJson.workflow = workflowMetadata.raw;
+                        } catch (e) { console.warn("Failed to parse extracted Workflow JSON"); }
                     }
-                } else {
-                    // No JSON found, try fallback to A1111 standard metadata on the whole chunk string
-                    const standard = parseStandardMetadata(payloadStr);
-                    if (standard) {
+                }
+
+                // 2. Search for Prompt: markers
+                const promptIdx = payloadStr.indexOf('Prompt:');
+                if (promptIdx !== -1) {
+                    const potential = extractBalancedJson(payloadStr, promptIdx);
+                    if (potential) {
+                        try {
+                            promptMetadata = extractComfyUIMetadata(potential);
+                            rawJson.prompt = promptMetadata.raw;
+                        } catch (e) { console.warn("Failed to parse extracted Prompt JSON"); }
+                    }
+                }
+
+                // 3. Fallback/A1111: Decode as EXIF text and check for standard parameters
+                const exifText = decodeExifText(payload);
+                if (exifText) {
+                    const standard = parseStandardMetadata(exifText);
+                    if (standard && (standard.positivePrompt || standard.seed)) {
                         if (!promptMetadata) promptMetadata = { model: 'Unknown', loras: [] };
+                        // Merge A1111 data into promptMetadata, giving priority to A1111 for these fields
                         Object.assign(promptMetadata, standard);
                         promptMetadata.parameters = standard;
                         promptMetadata.priorityResult = true;
