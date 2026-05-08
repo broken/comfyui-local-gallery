@@ -233,20 +233,20 @@
                     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
                         <div class="filter-group" style="flex-direction: row; align-items: center; gap: 0.75rem;">
                             <input type="checkbox" id="setting-constrain-width" style="width: 1.2rem; height: 1.2rem; cursor: pointer;">
-                            <label for="setting-constrain-width" style="font-size: 0.9rem; cursor: pointer;">Constrain Layout Width (Centered)</label>
+                            <label for="setting-constrain-width" style="font-size: 0.9rem; cursor: pointer;">Limit Gallery Width (Default: Max 1400px)</label>
                         </div>
 
                         <div class="filter-group" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
-                            <label style="font-size: 0.9rem;">Side Margins (Breathing Room)</label>
+                            <label style="font-size: 0.9rem;">Side Margins (Default: 2%)</label>
                             <div style="display: flex; align-items: center; gap: 1rem; width: 100%;">
                                 <input type="range" id="setting-side-margin" min="0" max="25" step="0.5" style="flex: 1; accent-color: var(--accent-color);">
-                                <span id="setting-side-margin-val" style="font-size: 0.9rem; font-weight: 600; min-width: 50px;">5%</span>
+                                <span id="setting-side-margin-val" style="font-size: 0.9rem; font-weight: 600; min-width: 50px;">2%</span>
                             </div>
-                            <span style="font-size: 0.75rem; color: var(--text-secondary);">How much space to leave on the left and right.</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Spacing on left/right of the gallery.</span>
                         </div>
 
                         <div class="filter-group" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
-                            <label style="font-size: 0.9rem;">Preview Minimum Width</label>
+                            <label style="font-size: 0.9rem;">Preview Minimum Width (Default: 280px)</label>
                             <div style="display: flex; align-items: center; gap: 1rem; width: 100%;">
                                 <input type="range" id="setting-item-width" min="150" max="600" step="10" style="flex: 1; accent-color: var(--accent-color);">
                                 <span id="setting-item-width-val" style="font-size: 0.9rem; font-weight: 600; min-width: 50px;">280px</span>
