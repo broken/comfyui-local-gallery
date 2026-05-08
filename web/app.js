@@ -35,7 +35,8 @@ const state = {
 
     // Settings
     settings: {
-        maxColumns: 0,
+        constrainWidth: true,
+        sideMargin: 2, // 2% default
         itemMinWidth: 280,
         aspectRatio: '1'
     }
@@ -89,7 +90,9 @@ const els = {
     settingsModal: document.getElementById('settings-modal'),
     btnCloseSettings: document.getElementById('close-settings-btn'),
     btnSaveSettings: document.getElementById('save-settings-btn'),
-    settingMaxColumns: document.getElementById('setting-max-columns'),
+    settingConstrainWidth: document.getElementById('setting-constrain-width'),
+    settingSideMargin: document.getElementById('setting-side-margin'),
+    settingSideMarginVal: document.getElementById('setting-side-margin-val'),
     settingItemWidth: document.getElementById('setting-item-width'),
     settingItemWidthVal: document.getElementById('setting-item-width-val'),
     settingAspectRatio: document.getElementById('setting-aspect-ratio')
@@ -188,6 +191,9 @@ async function init() {
     els.btnSaveSettings.addEventListener('click', saveAndApplySettings);
     els.settingItemWidth.addEventListener('input', (e) => {
         els.settingItemWidthVal.textContent = `${e.target.value}px`;
+    });
+    els.settingSideMargin.addEventListener('input', (e) => {
+        els.settingSideMarginVal.textContent = `${e.target.value}%`;
     });
     
     // Load Saved Settings
@@ -1828,7 +1834,9 @@ document.addEventListener('DOMContentLoaded', init);
 
 // --- Settings Management ---
 function openSettings() {
-    els.settingMaxColumns.value = state.settings.maxColumns;
+    els.settingConstrainWidth.checked = state.settings.constrainWidth;
+    els.settingSideMargin.value = state.settings.sideMargin;
+    els.settingSideMarginVal.textContent = `${state.settings.sideMargin}%`;
     els.settingItemWidth.value = state.settings.itemMinWidth;
     els.settingItemWidthVal.textContent = `${state.settings.itemMinWidth}px`;
     els.settingAspectRatio.value = state.settings.aspectRatio;
@@ -1840,7 +1848,8 @@ function closeSettings() {
 }
 
 function saveAndApplySettings() {
-    state.settings.maxColumns = parseInt(els.settingMaxColumns.value);
+    state.settings.constrainWidth = els.settingConstrainWidth.checked;
+    state.settings.sideMargin = parseFloat(els.settingSideMargin.value);
     state.settings.itemMinWidth = parseInt(els.settingItemWidth.value);
     state.settings.aspectRatio = els.settingAspectRatio.value;
     
@@ -1864,24 +1873,14 @@ function loadSettings() {
 
 function applySettings() {
     const root = document.documentElement;
-    const { maxColumns, itemMinWidth, aspectRatio } = state.settings;
+    const { constrainWidth, sideMargin, itemMinWidth, aspectRatio } = state.settings;
     
-    // Grid Columns
-    if (maxColumns === 0) {
-        root.style.setProperty('--grid-columns', 'auto-fill');
-    } else {
-        // To limit max columns while still being responsive on small screens,
-        // we use auto-fill but ensure the item width doesn't get too small
-        // or we use repeat(auto-fill, minmax(max(min-width, calc(100%/max-cols - gap)), 1fr))
-        const gap = '1.5rem';
-        root.style.setProperty('--grid-columns', `repeat(auto-fill, minmax(max(${itemMinWidth}px, calc(100% / ${maxColumns} - ${gap})), 1fr))`);
-        
-        // Actually, the above repeat() might be invalid syntax for repeat().
-        // Let's use a simpler approach:
-        if (maxColumns > 0) {
-             root.style.setProperty('--grid-columns', `repeat(auto-fill, minmax(max(${itemMinWidth}px, calc((100% - (${maxColumns - 1} * ${gap})) / ${maxColumns})), 1fr))`);
-        }
-    }
+    // Layout Width
+    root.style.setProperty('--container-max-width', constrainWidth ? '1400px' : '100%');
+    root.style.setProperty('--container-padding', `${sideMargin}%`);
+
+    // Grid Columns - Always auto-fill
+    root.style.setProperty('--grid-columns', 'auto-fill');
     
     root.style.setProperty('--grid-item-min-width', `${itemMinWidth}px`);
     root.style.setProperty('--grid-aspect-ratio', aspectRatio);

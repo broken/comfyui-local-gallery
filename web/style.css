@@ -18,6 +18,10 @@
     --grid-columns: auto-fill;
     --grid-item-min-width: 280px;
     --grid-aspect-ratio: 1;
+
+    /* Layout Settings */
+    --container-max-width: 1400px;
+    --container-padding: 2rem;
 }
 
 * {
@@ -60,7 +64,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    max-width: 1400px;
+    max-width: var(--container-max-width);
     margin: 0 auto;
 }
 
@@ -249,7 +253,7 @@ button {
 .filters-area {
     display: flex;
     gap: 1.5rem;
-    max-width: 1400px;
+    max-width: var(--container-max-width);
     margin: 1rem auto 0;
     padding-top: 1rem;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -310,7 +314,7 @@ select:disabled, .filter-input:disabled {
 }
 
 .status-text {
-    max-width: 1400px;
+    max-width: var(--container-max-width);
     margin: 0.8rem auto 0;
     font-size: 0.8rem;
     color: var(--accent-color);
@@ -318,9 +322,9 @@ select:disabled, .filter-input:disabled {
 
 /* Main Content & Gallery */
 main {
-    max-width: 1400px;
+    max-width: var(--container-max-width);
     margin: 2rem auto;
-    padding: 0 2rem;
+    padding: 0 var(--container-padding);
 }
 
 .gallery-grid {
@@ -491,7 +495,7 @@ main {
 .modal-content {
     position: relative;
     width: 90%;
-    max-width: 1400px;
+    max-width: var(--container-max-width);
     height: 90vh;
     border-radius: var(--border-radius-lg);
     display: flex;
