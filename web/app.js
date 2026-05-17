@@ -1374,6 +1374,7 @@ function renderGallery() {
     state.filteredImages.forEach(img => {
         const card = document.createElement('div');
         card.className = 'image-card';
+        card.dataset.filename = img.data.name;
         card.onclick = () => openImageModal(img);
         
         const shortModelName = img.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(img.data.model);
@@ -1735,8 +1736,24 @@ async function deleteImage() {
         state.images = state.images.filter(img => img.data.name !== filename);
         state.filteredImages = state.filteredImages.filter(img => img.data.name !== filename);
         
-        // Re-render
-        renderGallery();
+        // Remove from DOM directly to avoid full re-render jank
+        const card = els.galleryGrid.querySelector(`.image-card[data-filename="${CSS.escape(filename)}"]`);
+        if (card) card.remove();
+        
+        // Update results count
+        if (state.filteredImages.length > 0) {
+            els.resultsCount.style.display = 'block';
+            els.resultsCount.textContent = `${state.filteredImages.length} result${state.filteredImages.length !== 1 ? 's' : ''}`;
+        } else {
+            els.resultsCount.style.display = 'none';
+            els.galleryGrid.innerHTML = `
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <h2>No results found</h2>
+                    <p>Try adjusting your search or filters.</p>
+                </div>
+            `;
+        }
         
         // Show next image if available, else close
         if (state.filteredImages.length > 0) {
