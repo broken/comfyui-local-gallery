@@ -1715,10 +1715,8 @@ async function sendAllToComfyUI() {
 async function deleteImage() {
     if (!state.currentActiveImg || !state.currentDirHandle) return;
     
-    
-    const filename = state.currentActiveImg.data.name;
-    const oldBtnContent = els.btnDelete.innerHTML;
-    els.btnDelete.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div>';
+    const imgToDelete = state.currentActiveImg;
+    const filename = imgToDelete.data.name;
     
     try {
         // We first need readwrite permission to delete
@@ -1727,16 +1725,13 @@ async function deleteImage() {
             const reqPerm = await state.currentDirHandle.requestPermission({ mode: 'readwrite' });
             if (reqPerm !== 'granted') {
                 alert("Write permissions are required to delete files.");
-                els.btnDelete.innerHTML = oldBtnContent;
                 return;
             }
         }
         
-        const currentIndex = state.filteredImages.findIndex(img => img === state.currentActiveImg);
+        const currentIndex = state.filteredImages.findIndex(img => img === imgToDelete);
         
-        await state.currentDirHandle.removeEntry(filename);
-        
-        // Remove from memory
+        // Remove from memory optimistically
         state.images = state.images.filter(img => img.data.name !== filename);
         state.filteredImages = state.filteredImages.filter(img => img.data.name !== filename);
         
@@ -1751,12 +1746,17 @@ async function deleteImage() {
             closeModal();
         }
         
-        els.statusText.textContent = `Deleted ${filename}. Loaded ${state.images.length} images.`;
+        // Perform the deletion asynchronously without blocking UI
+        state.currentDirHandle.removeEntry(filename).then(() => {
+            els.statusText.textContent = `Deleted ${filename}. Loaded ${state.images.length} images.`;
+        }).catch(err => {
+            console.error("Failed to delete file:", err);
+            alert(`Failed to delete file ${filename}: ${err.message}`);
+        });
+        
     } catch (err) {
-        console.error("Failed to delete file:", err);
-        alert(`Failed to delete file: ${err.message}`);
-    } finally {
-        els.btnDelete.innerHTML = oldBtnContent;
+        console.error("Error setting up deletion:", err);
+        alert(`Error: ${err.message}`);
     }
 }
 
