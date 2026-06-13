@@ -1592,7 +1592,17 @@ function getPrefixGroups() {
     return Object.values(groups).sort((a, b) => {
         if (a.prefix === '[No Prefix]') return 1;
         if (b.prefix === '[No Prefix]') return -1;
-        return a.prefix.toLowerCase().localeCompare(b.prefix.toLowerCase());
+        
+        if (state.sortBy === 'date-desc') {
+            return b.coverImage.lastModified - a.coverImage.lastModified;
+        } else if (state.sortBy === 'date-asc') {
+            return a.coverImage.lastModified - b.coverImage.lastModified;
+        } else if (state.sortBy === 'name-asc') {
+            return a.prefix.toLowerCase().localeCompare(b.prefix.toLowerCase());
+        } else if (state.sortBy === 'name-desc') {
+            return b.prefix.toLowerCase().localeCompare(a.prefix.toLowerCase());
+        }
+        return 0;
     });
 }
 
