@@ -95,7 +95,15 @@ const els = {
     settingSideMarginVal: document.getElementById('setting-side-margin-val'),
     settingItemWidth: document.getElementById('setting-item-width'),
     settingItemWidthVal: document.getElementById('setting-item-width-val'),
-    settingAspectRatio: document.getElementById('setting-aspect-ratio')
+    settingAspectRatio: document.getElementById('setting-aspect-ratio'),
+
+    // Edit Metadata UI
+    btnEditMetadata: document.getElementById('edit-metadata-btn'),
+    editMetadataModal: document.getElementById('edit-metadata-modal'),
+    btnCloseEditMetadata: document.getElementById('close-edit-metadata-btn'),
+    btnSaveMetadata: document.getElementById('save-metadata-btn'),
+    editMetadataTextarea: document.getElementById('edit-metadata-textarea'),
+    editMetadataStatus: document.getElementById('edit-metadata-status')
 };
 
 // --- IDB Storage for Folder Caching & Metadata ---
@@ -195,6 +203,11 @@ async function init() {
     els.settingSideMargin.addEventListener('input', (e) => {
         els.settingSideMarginVal.textContent = `${e.target.value}%`;
     });
+
+    // Edit Metadata Listeners
+    els.btnEditMetadata.addEventListener('click', openEditMetadata);
+    els.btnCloseEditMetadata.addEventListener('click', closeEditMetadata);
+    els.btnSaveMetadata.addEventListener('click', saveEditMetadata);
     
     // Load Saved Settings
     loadSettings();
@@ -220,9 +233,22 @@ async function init() {
     
     // Close modal on escape or clicking backdrop
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeModal();
-        if (e.key === 'ArrowLeft') navigateImage(-1);
-        if (e.key === 'ArrowRight') navigateImage(1);
+        if (e.key === 'Escape') {
+            if (!els.editMetadataModal.classList.contains('hidden')) {
+                closeEditMetadata();
+            } else {
+                closeModal();
+            }
+        }
+        
+        if (e.key === 'ArrowLeft') {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            navigateImage(-1);
+        }
+        if (e.key === 'ArrowRight') {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            navigateImage(1);
+        }
         
         if (e.key === 'Delete' || e.key === 'Backspace') {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -237,6 +263,9 @@ async function init() {
     });
     els.settingsModal.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) closeSettings();
+    });
+    els.editMetadataModal.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal') || e.target.classList.contains('modal-backdrop')) closeEditMetadata();
     });
 
     // Zoom and Pan Listeners
@@ -737,6 +766,109 @@ function finalizeMetadata(defaultData, promptMetadata, workflowMetadata, rawJson
     return merged;
 }
 
+// --- CRC-32 & PNG Chunk Rewriting Helper for Metadata Edit ---
+const crcTable = [];
+for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+        if (c & 1) {
+            c = 0xedb88320 ^ (c >>> 1);
+        } else {
+            c = c >>> 1;
+        }
+    }
+    crcTable[n] = c;
+}
+
+function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) {
+        crc = crcTable[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createPNGtEXtChunk(keyword, text) {
+    const encoder = new TextEncoder();
+    const keywordBytes = encoder.encode(keyword);
+    const textBytes = encoder.encode(text);
+    
+    // tEXt format: keyword (null-terminated) + text
+    const chunkData = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
+    chunkData.set(keywordBytes, 0);
+    chunkData[keywordBytes.length] = 0; // null separator
+    chunkData.set(textBytes, keywordBytes.length + 1);
+    
+    const chunkType = new Uint8Array([116, 69, 88, 116]); // 'tEXt'
+    
+    const crcData = new Uint8Array(4 + chunkData.length);
+    crcData.set(chunkType, 0);
+    crcData.set(chunkData, 4);
+    const crc = crc32(crcData);
+    
+    const chunk = new Uint8Array(4 + 4 + chunkData.length + 4);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, chunkData.length); // Length (big endian)
+    chunk.set(chunkType, 4);            // Type
+    chunk.set(chunkData, 8);            // Data
+    view.setUint32(8 + chunkData.length, crc); // CRC (big endian)
+    
+    return chunk;
+}
+
+function updatePNGParameters(arrayBuffer, newParametersText) {
+    const view = new DataView(arrayBuffer);
+    const parts = [];
+    
+    // Check signature
+    if (view.getUint32(0) !== 0x89504e47 || view.getUint32(4) !== 0x0d0a1a0a) {
+        throw new Error("Not a valid PNG file");
+    }
+    
+    // Write signature
+    parts.push(new Uint8Array(arrayBuffer, 0, 8));
+    
+    let offset = 8;
+    const decoder = new TextDecoder('utf-8');
+    
+    while (offset < arrayBuffer.byteLength) {
+        const length = view.getUint32(offset);
+        const type = decoder.decode(new Uint8Array(arrayBuffer, offset + 4, 4));
+        
+        let shouldKeep = true;
+        if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') {
+            const chunkData = new Uint8Array(arrayBuffer, offset + 8, length);
+            let nullIdx = -1;
+            for (let i = 0; i < chunkData.length; i++) {
+                if (chunkData[i] === 0) {
+                    nullIdx = i;
+                    break;
+                }
+            }
+            if (nullIdx !== -1) {
+                const keyword = decoder.decode(chunkData.subarray(0, nullIdx));
+                if (keyword === 'parameters') {
+                    shouldKeep = false; // remove old parameters
+                }
+            }
+        }
+        
+        if (type === 'IEND') {
+            // Insert new chunk before IEND
+            const newChunk = createPNGtEXtChunk('parameters', newParametersText);
+            parts.push(newChunk);
+        }
+        
+        if (shouldKeep) {
+            parts.push(new Uint8Array(arrayBuffer, offset, 12 + length));
+        }
+        
+        offset += 12 + length;
+    }
+    
+    return new Blob(parts, { type: 'image/png' });
+}
+
 // Parse PNG chunks
 // Reads ArrayBuffer of a file to extract tEXt/iTXt chunks containing prompt data
 async function parsePNG(file) {
@@ -1090,6 +1222,7 @@ async function checkDirectoryForChanges() {
                 foundNames.add(entry.name);
                 if (!currentFileNames.has(entry.name)) {
                     const file = await entry.getFile();
+                    file.handle = entry;
                     newFiles.push(file);
                 }
             }
@@ -1161,6 +1294,7 @@ async function scanDirectory(dirHandle) {
     for await (const entry of dirHandle.values()) {
         if (entry.kind === 'file' && isSupportedImage(entry.name)) {
             const file = await entry.getFile();
+            file.handle = entry;
             filesBatch.push(file);
             
             // Give UI a chance to breathe every 50 files
@@ -1184,6 +1318,8 @@ async function processBatch(filesBatch, silent = false) {
         if (cached && cached.lastModified === file.lastModified) {
             // URL object URLs expire, so we still need to create a new one
             cached.url = URL.createObjectURL(file);
+            cached.file = file;
+            cached.handle = file.handle || null;
             // Re-add to global sets for this session
             if (cached.data.model && cached.data.model !== 'Unknown') {
                 state.models.add(cached.data.model);
@@ -1227,6 +1363,7 @@ async function processBatch(filesBatch, silent = false) {
         
         const imageData = {
             file,
+            handle: file.handle || null,
             url,
             lastModified: file.lastModified,
             data: metadata
@@ -1509,9 +1646,9 @@ function openImageModal(img) {
         els.modalSize.textContent = img.data.parameters.size || '-';
         els.modalSeed.textContent = img.data.parameters.seed || '-';
     } else {
-        els.modalParametersSection.classList.add('hidden');
+        els.modalParametersSection.classList.remove('hidden');
+        els.modalRawParameters.textContent = 'No A1111 parameters found. Click the edit button to add metadata.';
         els.modalSettingsSection.classList.add('hidden');
-        els.modalRawParameters.textContent = '';
     }
 
 
@@ -1901,4 +2038,165 @@ function applySettings() {
     
     root.style.setProperty('--grid-item-min-width', `${itemMinWidth}px`);
     root.style.setProperty('--grid-aspect-ratio', aspectRatio);
+}
+
+// --- Edit Metadata Functions ---
+function openEditMetadata() {
+    if (!state.currentActiveImg) return;
+    
+    const img = state.currentActiveImg;
+    els.editMetadataStatus.textContent = '';
+    els.editMetadataStatus.style.color = '';
+    
+    let rawText = '';
+    if (img.data.parameters && img.data.parameters.raw) {
+        rawText = img.data.parameters.raw;
+    } else {
+        // Build a template from current parsed data
+        const parts = [];
+        if (img.data.positivePrompt && img.data.positivePrompt !== 'No metadata found' && img.data.positivePrompt !== 'No positive prompt string found.') {
+            parts.push(img.data.positivePrompt);
+        }
+        if (img.data.negativePrompt && img.data.negativePrompt !== 'No metadata found' && img.data.negativePrompt !== 'None' && img.data.negativePrompt !== 'None detected.') {
+            parts.push(`Negative prompt: ${img.data.negativePrompt}`);
+        }
+        
+        // Settings line
+        const settingsParts = [];
+        if (img.data.steps && img.data.steps !== '-') settingsParts.push(`Steps: ${img.data.steps}`);
+        if (img.data.sampler && img.data.sampler !== '-') settingsParts.push(`Sampler: ${img.data.sampler}`);
+        if (img.data.cfg && img.data.cfg !== '-') settingsParts.push(`CFG scale: ${img.data.cfg}`);
+        if (img.data.seed && img.data.seed !== '-') settingsParts.push(`Seed: ${img.data.seed}`);
+        if (img.data.size && img.data.size !== '-') settingsParts.push(`Size: ${img.data.size}`);
+        
+        // Model
+        if (img.data.model && img.data.model !== 'Unknown') {
+            settingsParts.push(`Model: ${img.data.model}`);
+        } else {
+            settingsParts.push(`Model: sd_xl_base_1.0`); // default placeholder
+        }
+        
+        if (settingsParts.length > 0) {
+            parts.push(settingsParts.join(', '));
+        }
+        rawText = parts.join('\n');
+    }
+    
+    els.editMetadataTextarea.value = rawText;
+    els.editMetadataModal.classList.remove('hidden');
+}
+
+function closeEditMetadata() {
+    els.editMetadataModal.classList.add('hidden');
+}
+
+async function saveEditMetadata() {
+    if (!state.currentActiveImg) return;
+    
+    const img = state.currentActiveImg;
+    const newText = els.editMetadataTextarea.value.trim();
+    
+    if (!newText) {
+        els.editMetadataStatus.textContent = 'Metadata text cannot be empty.';
+        els.editMetadataStatus.style.color = '#ef4444';
+        return;
+    }
+    
+    const oldBtnContent = els.btnSaveMetadata.innerHTML;
+    els.btnSaveMetadata.disabled = true;
+    els.btnSaveMetadata.innerHTML = '<svg class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin: 0; display: inline-block; vertical-align: middle; margin-right: 0.5rem;" viewBox="0 0 50 50"><circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle></svg> Saving...';
+    els.editMetadataStatus.textContent = '';
+    
+    try {
+        // 1. Parse the new text
+        const parsed = parseStandardMetadata(newText);
+        if (!parsed) {
+            throw new Error("Failed to parse metadata format. Ensure it follows A1111 structure (comma-separated key-values on the last line).");
+        }
+        
+        // 2. Update the in-memory image metadata
+        img.data.model = parsed.model;
+        img.data.loras = parsed.loras;
+        img.data.positivePrompt = parsed.positivePrompt;
+        img.data.negativePrompt = parsed.negativePrompt;
+        img.data.steps = parsed.steps;
+        img.data.cfg = parsed.cfg;
+        img.data.sampler = parsed.sampler;
+        img.data.size = parsed.size;
+        img.data.seed = parsed.seed;
+        img.data.parameters = parsed;
+        
+        // 3. Rewrite PNG file on disk if it's a PNG and we have write permissions
+        const isPng = img.data.name.toLowerCase().endsWith('.png');
+        if (isPng && state.currentDirHandle) {
+            // Check write permission
+            const permission = await state.currentDirHandle.queryPermission({ mode: 'readwrite' });
+            if (permission !== 'granted') {
+                const reqPerm = await state.currentDirHandle.requestPermission({ mode: 'readwrite' });
+                if (reqPerm !== 'granted') {
+                    throw new Error("Folder write permissions are required to update the image file. The changes are only saved in the browser cache.");
+                }
+            }
+            
+            // Get file handle
+            const handle = img.handle || await state.currentDirHandle.getFileHandle(img.data.name);
+            
+            // Read binary file
+            const file = await handle.getFile();
+            const arrayBuffer = await file.arrayBuffer();
+            
+            // Rewrite PNG
+            const newBlob = updatePNGParameters(arrayBuffer, newText);
+            
+            // Write to disk
+            const writable = await handle.createWritable();
+            await writable.write(newBlob);
+            await writable.close();
+            
+            // Re-read file to synchronize lastModified time in browser cache
+            const updatedFile = await handle.getFile();
+            img.file = updatedFile;
+            img.lastModified = updatedFile.lastModified;
+        }
+        
+        // 4. Save to IndexedDB
+        await saveToDB(img);
+        
+        // 5. Update global models and LoRAs sets if they changed
+        // Re-calculate state.models and state.loras to avoid stale values
+        state.models.clear();
+        state.loras.clear();
+        state.images.forEach(image => {
+            if (image.data.model && image.data.model !== 'Unknown') {
+                state.models.add(image.data.model);
+            }
+            image.data.loras.forEach(l => {
+                state.loras.add(typeof l === 'string' ? l : l.name);
+            });
+        });
+        
+        // 6. Update UI
+        updateFiltersUI();
+        handleFilterChange();
+        
+        // Update detail modal views if it's still open and showing this image
+        if (state.currentActiveImg === img) {
+            openImageModal(img);
+        }
+        
+        els.editMetadataStatus.textContent = isPng ? 'Saved successfully to file and database!' : 'Saved successfully to database!';
+        els.editMetadataStatus.style.color = '#22c55e';
+        
+        setTimeout(() => {
+            closeEditMetadata();
+        }, 1500);
+        
+    } catch (err) {
+        console.error("Failed to save metadata:", err);
+        els.editMetadataStatus.textContent = err.message;
+        els.editMetadataStatus.style.color = '#ef4444';
+    } finally {
+        els.btnSaveMetadata.disabled = false;
+        els.btnSaveMetadata.innerHTML = oldBtnContent;
+    }
 }

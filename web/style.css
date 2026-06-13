@@ -928,3 +928,26 @@ details pre {
 .setting-item.full-width {
     grid-column: 1 / -1;
 }
+
+/* Edit Metadata Modal Styles */
+#edit-metadata-textarea {
+    transition: var(--transition-fast);
+}
+
+#edit-metadata-textarea:focus {
+    border-color: var(--accent-color);
+    background: rgba(0, 0, 0, 0.6) !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+#edit-metadata-btn {
+    opacity: 0.7;
+    transition: all var(--transition-fast);
+}
+
+#edit-metadata-btn:hover {
+    opacity: 1;
+    color: var(--accent-color);
+    background: rgba(255, 255, 255, 0.1);
+}
+
