@@ -951,3 +951,184 @@ details pre {
     background: rgba(255, 255, 255, 0.1);
 }
 
+/* Prefix View & Segmented Controls styling */
+.gallery-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.view-toggle-container {
+    display: flex;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-sm);
+    padding: 2px;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.4rem 0.9rem;
+    border-radius: calc(var(--border-radius-sm) - 2px);
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.toggle-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.toggle-btn.active {
+    background: var(--accent-color);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.toggle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Stacked Card Effect for Prefix View */
+.prefix-card {
+    position: relative;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    aspect-ratio: var(--grid-aspect-ratio);
+    border-radius: var(--border-radius-md);
+}
+
+.prefix-card-stack {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* Middle card in stack */
+.prefix-card-stack::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 6px;
+    right: -6px;
+    bottom: 6px;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-md);
+    opacity: 0.7;
+    z-index: 1;
+    transition: var(--transition-smooth);
+    pointer-events: none;
+}
+
+/* Bottom card in stack */
+.prefix-card-stack::after {
+    content: '';
+    position: absolute;
+    top: -12px;
+    left: 12px;
+    right: -12px;
+    bottom: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-md);
+    opacity: 0.4;
+    z-index: 0;
+    transition: var(--transition-smooth);
+    pointer-events: none;
+}
+
+/* Hover stack shifting */
+.prefix-card:hover .prefix-card-stack::before {
+    transform: translate(3px, -3px);
+    opacity: 0.9;
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+.prefix-card:hover .prefix-card-stack::after {
+    transform: translate(6px, -6px);
+    opacity: 0.6;
+    border-color: rgba(99, 102, 241, 0.1);
+}
+
+/* Front card (holds image and overlay) */
+.prefix-card-front {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius-md);
+    overflow: hidden;
+    z-index: 2;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: var(--transition-smooth);
+}
+
+.prefix-card:hover .prefix-card-front {
+    transform: translateY(-2px);
+    border-color: var(--accent-color);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+.prefix-card:hover .card-image-wrap img {
+    transform: scale(1.05);
+}
+
+/* Badge for count */
+.prefix-count-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--accent-color);
+    color: white;
+    padding: 0.25rem 0.65rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    z-index: 3;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+/* Dark elegant gradient overlay for prefix info */
+.prefix-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 2.5rem 1.25rem 1.25rem;
+    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.7) 50%, rgba(0,0,0,0));
+    color: white;
+    z-index: 3;
+    transition: var(--transition-smooth);
+}
+
+.prefix-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    margin-bottom: 0.1rem;
+}
+
+.prefix-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    transition: var(--transition-fast);
+}
+
+.prefix-card:hover .prefix-subtitle {
+    color: white;
+}
+
+

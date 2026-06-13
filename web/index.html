@@ -92,7 +92,17 @@
                 <p>Reading images and extracting metadata...</p>
             </div>
             
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+            <div class="gallery-header-row" style="margin-bottom: 1rem;">
+                <div class="view-toggle-container">
+                    <button id="view-gallery-btn" class="toggle-btn active" title="Show all images" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        Images
+                    </button>
+                    <button id="view-prefixes-btn" class="toggle-btn" title="Group images by filename prefix" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        Prefixes
+                    </button>
+                </div>
                 <span id="results-count" style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; display: none;"></span>
             </div>
             

@@ -13,6 +13,7 @@ const state = {
     models: new Set(),
     loras: new Set(),
     isScanning: false,
+    currentView: 'images', // 'images' or 'prefixes'
     
     // Filters
     searchQuery: '', // Global search box
@@ -103,7 +104,11 @@ const els = {
     btnCloseEditMetadata: document.getElementById('close-edit-metadata-btn'),
     btnSaveMetadata: document.getElementById('save-metadata-btn'),
     editMetadataTextarea: document.getElementById('edit-metadata-textarea'),
-    editMetadataStatus: document.getElementById('edit-metadata-status')
+    editMetadataStatus: document.getElementById('edit-metadata-status'),
+    
+    // View switches
+    btnViewGallery: document.getElementById('view-gallery-btn'),
+    btnViewPrefixes: document.getElementById('view-prefixes-btn')
 };
 
 // --- IDB Storage for Folder Caching & Metadata ---
@@ -192,6 +197,12 @@ async function init() {
     els.btnCopyNegative.addEventListener('click', () => copyToClipboard(els.modalNegative.textContent, els.btnCopyNegative));
     els.btnSendAll.addEventListener('click', sendAllToComfyUI);
     els.btnCloseModal.addEventListener('click', closeModal);
+
+    // View Switcher Listeners
+    els.btnViewGallery.addEventListener('click', () => switchView('images'));
+    els.btnViewPrefixes.addEventListener('click', () => switchView('prefixes'));
+    els.btnViewGallery.disabled = true;
+    els.btnViewPrefixes.disabled = true;
 
     // Settings Listeners
     els.settingsBtn.addEventListener('click', openSettings);
@@ -1176,6 +1187,8 @@ async function processDirectory(dirHandle) {
     els.autoUpdateCb.disabled = false;
     els.btnClearFilters.disabled = false;
     els.btnSelect.disabled = false;
+    els.btnViewGallery.disabled = false;
+    els.btnViewPrefixes.disabled = false;
     
     // Restore default button text in case it was the "Re-open" button
     els.btnSelect.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg> Select Folder`;
@@ -1465,7 +1478,11 @@ function handleFilterChange() {
         return 0;
     });
     
-    renderGallery();
+    if (state.currentView === 'images') {
+        renderGallery();
+    } else {
+        renderPrefixes();
+    }
 }
 
 function clearFilters() {
@@ -1547,6 +1564,118 @@ function renderGallery() {
     });
     
     els.galleryGrid.appendChild(fragment);
+}
+
+function getFilePrefix(filename) {
+    if (!filename) return '';
+    const match = filename.match(/^[a-zA-Z0-9]+/);
+    return match ? match[0] : '';
+}
+
+function getPrefixGroups() {
+    const groups = {};
+    
+    state.filteredImages.forEach(img => {
+        const prefix = getFilePrefix(img.data.name) || '[No Prefix]';
+        if (!groups[prefix]) {
+            groups[prefix] = {
+                prefix,
+                count: 0,
+                coverImage: img,
+                images: []
+            };
+        }
+        groups[prefix].count++;
+        groups[prefix].images.push(img);
+    });
+    
+    return Object.values(groups).sort((a, b) => {
+        if (a.prefix === '[No Prefix]') return 1;
+        if (b.prefix === '[No Prefix]') return -1;
+        return a.prefix.toLowerCase().localeCompare(b.prefix.toLowerCase());
+    });
+}
+
+function renderPrefixes() {
+    els.galleryGrid.innerHTML = '';
+    
+    const prefixGroups = getPrefixGroups();
+    
+    if (state.images.length > 0) {
+        els.resultsCount.style.display = 'block';
+        els.resultsCount.textContent = `${prefixGroups.length} group${prefixGroups.length !== 1 ? 's' : ''}`;
+    } else {
+        els.resultsCount.style.display = 'none';
+    }
+    
+    if (prefixGroups.length === 0) {
+        els.galleryGrid.innerHTML = `
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <h2>No prefix groups found</h2>
+                <p>Try adjusting your search or filters.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    
+    prefixGroups.forEach(group => {
+        const card = document.createElement('div');
+        card.className = 'prefix-card';
+        card.onclick = () => selectPrefixGroup(group.prefix);
+        
+        card.innerHTML = `
+            <div class="prefix-card-stack">
+                <div class="prefix-card-front">
+                    <div class="card-image-wrap">
+                        <img src="${group.coverImage.url}" loading="lazy" alt="${group.prefix}">
+                    </div>
+                    <div class="prefix-count-badge">
+                        ${group.count}
+                    </div>
+                    <div class="prefix-overlay">
+                        <div class="prefix-title">${group.prefix}</div>
+                        <div class="prefix-subtitle">Click to view images</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        fragment.appendChild(card);
+    });
+    
+    els.galleryGrid.appendChild(fragment);
+}
+
+function selectPrefixGroup(prefix) {
+    if (prefix === '[No Prefix]') {
+        els.filenameFilter.value = '';
+    } else {
+        els.filenameFilter.value = prefix;
+    }
+    
+    state.filenameQuery = els.filenameFilter.value.toLowerCase();
+    switchView('images');
+    handleFilterChange();
+}
+
+function switchView(viewName) {
+    state.currentView = viewName;
+    
+    if (viewName === 'images') {
+        els.btnViewGallery.classList.add('active');
+        els.btnViewPrefixes.classList.remove('active');
+    } else {
+        els.btnViewGallery.classList.remove('active');
+        els.btnViewPrefixes.classList.add('active');
+    }
+    
+    if (state.currentView === 'images') {
+        renderGallery();
+    } else {
+        renderPrefixes();
+    }
 }
 
 async function copyToClipboard(text, btn) {
