@@ -1094,9 +1094,23 @@ async function parseWebP(file) {
                 }
 
                 // 3. Search for A1111 UserComment (UNICODE)
-                const unicodeIdx = payloadStr.indexOf('UNICODE');
-                if (unicodeIdx !== -1) {
-                    const data = new Uint8Array(payload).slice(unicodeIdx + 8);
+                const payloadUint8 = new Uint8Array(payload);
+                let unicodeByteIdx = -1;
+                for (let i = 0; i <= payloadUint8.length - 7; i++) {
+                    if (payloadUint8[i] === 85 && // U
+                        payloadUint8[i+1] === 78 && // N
+                        payloadUint8[i+2] === 73 && // I
+                        payloadUint8[i+3] === 67 && // C
+                        payloadUint8[i+4] === 79 && // O
+                        payloadUint8[i+5] === 68 && // D
+                        payloadUint8[i+6] === 69) { // E
+                        unicodeByteIdx = i;
+                        break;
+                    }
+                }
+
+                if (unicodeByteIdx !== -1) {
+                    const data = payloadUint8.slice(unicodeByteIdx + 8);
                     // Decode as UTF-16 (Try BE then LE)
                     let decoded = new TextDecoder('utf-16be').decode(data);
                     if (decoded.includes('\u0000') || decoded.length < 2) {
@@ -1116,7 +1130,7 @@ async function parseWebP(file) {
 
                 // 4. Search for A1111 UserComment (ASCII)
                 const asciiIdx = payloadStr.indexOf('ASCII');
-                if (asciiIdx !== -1 && unicodeIdx === -1) {
+                if (asciiIdx !== -1 && unicodeByteIdx === -1) {
                     const exifText = payloadStr.substring(asciiIdx + 8).replace(/\0/g, '').trim();
                     if (exifText && !exifText.startsWith('{')) {
                         const standard = parseStandardMetadata(exifText);
