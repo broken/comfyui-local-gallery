@@ -108,7 +108,10 @@ const els = {
     
     // View switches
     btnViewGallery: document.getElementById('view-gallery-btn'),
-    btnViewPrefixes: document.getElementById('view-prefixes-btn')
+    btnViewPrefixes: document.getElementById('view-prefixes-btn'),
+
+    // Scroll to Top
+    btnScrollToTop: document.getElementById('scroll-to-top-btn')
 };
 
 // --- IDB Storage for Folder Caching & Metadata ---
@@ -319,6 +322,24 @@ async function init() {
         }
     } catch (e) {
         console.warn("Could not load cached directory handle", e);
+    }
+
+    // Scroll to Top Listener
+    if (els.btnScrollToTop) {
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                els.btnScrollToTop.classList.add('visible');
+            } else {
+                els.btnScrollToTop.classList.remove('visible');
+            }
+        });
+
+        els.btnScrollToTop.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
     }
 }
 
