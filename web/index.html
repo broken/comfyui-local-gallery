@@ -87,11 +87,6 @@
 
         <!-- Main Gallery -->
         <main>
-            <div id="loading-spinner" class="spinner-container hidden">
-                <div class="spinner"></div>
-                <p>Reading images and extracting metadata...</p>
-            </div>
-            
             <div class="gallery-header-row" style="margin-bottom: 1rem;">
                 <div class="view-toggle-container">
                     <button id="view-gallery-btn" class="toggle-btn active" title="Show all images" disabled>
@@ -104,6 +99,11 @@
                     </button>
                 </div>
                 <span id="results-count" style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; display: none;"></span>
+            </div>
+
+            <div id="loading-spinner" class="spinner-container hidden">
+                <div class="spinner"></div>
+                <p>Reading images and extracting metadata...</p>
             </div>
             
             <div id="gallery-grid" class="gallery-grid">
