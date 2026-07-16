@@ -309,6 +309,15 @@ select:focus, .filter-input:focus {
     border-color: var(--accent-color);
 }
 
+.filter-input.filter-error {
+    border-color: #ef4444 !important;
+}
+
+.filter-input.filter-error:focus {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
 select:disabled, .filter-input:disabled {
     opacity: 0.5;
     cursor: not-allowed;

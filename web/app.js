@@ -39,7 +39,8 @@ const state = {
         constrainWidth: true,
         sideMargin: 2, // 2% default
         itemMinWidth: 280,
-        aspectRatio: '1'
+        aspectRatio: '1',
+        filenameFilterRegex: false
     }
 };
 
@@ -92,6 +93,7 @@ const els = {
     btnCloseSettings: document.getElementById('close-settings-btn'),
     btnSaveSettings: document.getElementById('save-settings-btn'),
     settingConstrainWidth: document.getElementById('setting-constrain-width'),
+    settingFilenameRegex: document.getElementById('setting-filename-regex'),
     settingSideMargin: document.getElementById('setting-side-margin'),
     settingSideMarginVal: document.getElementById('setting-side-margin-val'),
     settingItemWidth: document.getElementById('setting-item-width'),
@@ -1479,6 +1481,21 @@ function handleFilterChange() {
         els.btnClearSearch.classList.remove('visible');
     }
     
+    // Compile regex if filename filter is regex and has input
+    let filenameRegex = null;
+    let regexError = false;
+    if (state.filenameQuery && state.settings.filenameFilterRegex) {
+        try {
+            filenameRegex = new RegExp(els.filenameFilter.value, 'i');
+            els.filenameFilter.classList.remove('filter-error');
+        } catch (e) {
+            regexError = true;
+            els.filenameFilter.classList.add('filter-error');
+        }
+    } else {
+        els.filenameFilter.classList.remove('filter-error');
+    }
+    
     state.filteredImages = state.images.filter(img => {
         // Global Search Filter
         const matchesSearch = !state.searchQuery || 
@@ -1487,7 +1504,18 @@ function handleFilterChange() {
                                img.data.loras.some(l => (typeof l === 'string' ? l : l.name).toLowerCase().includes(state.searchQuery));
                                
         // Specific Filename Filter
-        const matchesFilename = !state.filenameQuery || img.data.name.toLowerCase().includes(state.filenameQuery);
+        let matchesFilename = true;
+        if (state.filenameQuery) {
+            if (state.settings.filenameFilterRegex) {
+                if (regexError) {
+                    matchesFilename = true; // Safe fallback: show all results on invalid regex
+                } else if (filenameRegex) {
+                    matchesFilename = filenameRegex.test(img.data.name);
+                }
+            } else {
+                matchesFilename = img.data.name.toLowerCase().includes(state.filenameQuery);
+            }
+        }
                                
         // Model Filter (exact match on full path inside state)
         const matchesModel = !state.selectedModel || img.data.model === state.selectedModel;
@@ -2163,6 +2191,7 @@ document.addEventListener('DOMContentLoaded', init);
 // --- Settings Management ---
 function openSettings() {
     els.settingConstrainWidth.checked = state.settings.constrainWidth;
+    els.settingFilenameRegex.checked = !!state.settings.filenameFilterRegex;
     els.settingSideMargin.value = state.settings.sideMargin;
     els.settingSideMarginVal.textContent = `${state.settings.sideMargin}%`;
     els.settingItemWidth.value = state.settings.itemMinWidth;
@@ -2177,12 +2206,14 @@ function closeSettings() {
 
 function saveAndApplySettings() {
     state.settings.constrainWidth = els.settingConstrainWidth.checked;
+    state.settings.filenameFilterRegex = els.settingFilenameRegex.checked;
     state.settings.sideMargin = parseFloat(els.settingSideMargin.value);
     state.settings.itemMinWidth = parseInt(els.settingItemWidth.value);
     state.settings.aspectRatio = els.settingAspectRatio.value;
     
     localStorage.setItem('gallery_settings', JSON.stringify(state.settings));
     applySettings();
+    handleFilterChange();
     closeSettings();
 }
 
