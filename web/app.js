@@ -1537,6 +1537,18 @@ function handleFilterChange() {
             return a.data.name.localeCompare(b.data.name);
         } else if (state.sortBy === 'name-desc') {
             return b.data.name.localeCompare(a.data.name);
+        } else if (state.sortBy === 'model-asc') {
+            const modelA = (a.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(a.data.model || '')).toLowerCase();
+            const modelB = (b.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(b.data.model || '')).toLowerCase();
+            const comp = modelA.localeCompare(modelB);
+            if (comp !== 0) return comp;
+            return a.data.name.localeCompare(b.data.name);
+        } else if (state.sortBy === 'model-desc') {
+            const modelA = (a.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(a.data.model || '')).toLowerCase();
+            const modelB = (b.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(b.data.model || '')).toLowerCase();
+            const comp = modelB.localeCompare(modelA);
+            if (comp !== 0) return comp;
+            return b.data.name.localeCompare(a.data.name);
         }
         return 0;
     });
@@ -1663,6 +1675,18 @@ function getPrefixGroups() {
         } else if (state.sortBy === 'name-asc') {
             return a.prefix.toLowerCase().localeCompare(b.prefix.toLowerCase());
         } else if (state.sortBy === 'name-desc') {
+            return b.prefix.toLowerCase().localeCompare(a.prefix.toLowerCase());
+        } else if (state.sortBy === 'model-asc') {
+            const modelA = (a.coverImage.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(a.coverImage.data.model || '')).toLowerCase();
+            const modelB = (b.coverImage.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(b.coverImage.data.model || '')).toLowerCase();
+            const comp = modelA.localeCompare(modelB);
+            if (comp !== 0) return comp;
+            return a.prefix.toLowerCase().localeCompare(b.prefix.toLowerCase());
+        } else if (state.sortBy === 'model-desc') {
+            const modelA = (a.coverImage.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(a.coverImage.data.model || '')).toLowerCase();
+            const modelB = (b.coverImage.data.model === 'Unknown' ? 'Unknown Base Model' : normalizeName(b.coverImage.data.model || '')).toLowerCase();
+            const comp = modelB.localeCompare(modelA);
+            if (comp !== 0) return comp;
             return b.prefix.toLowerCase().localeCompare(a.prefix.toLowerCase());
         }
         return 0;
