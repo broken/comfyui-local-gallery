@@ -78,6 +78,7 @@ const els = {
     modalSampler: document.getElementById('modal-sampler'),
     modalSize: document.getElementById('modal-size'),
     modalSeed: document.getElementById('modal-seed'),
+    modalFileDate: document.getElementById('modal-file-date'),
     btnDelete: document.getElementById('delete-image-btn'),
     btnPrev: document.getElementById('prev-image-btn'),
     btnNext: document.getElementById('next-image-btn'),
@@ -1877,6 +1878,15 @@ function openImageModal(img) {
         els.modalSettingsSection.classList.add('hidden');
     }
 
+    if (els.modalFileDate) {
+        const fileTime = img.lastModified || (img.file && img.file.lastModified);
+        if (fileTime) {
+            const dateObj = new Date(fileTime);
+            els.modalFileDate.textContent = isNaN(dateObj.getTime()) ? '-' : dateObj.toLocaleString();
+        } else {
+            els.modalFileDate.textContent = '-';
+        }
+    }
 
     els.modal.classList.remove('hidden');
 }
