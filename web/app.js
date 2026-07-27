@@ -1433,14 +1433,42 @@ function updateFiltersUI() {
     const currentModel = els.modelFilter.value;
     const currentLora = els.loraFilter.value;
 
+    // Compute picture counts for models and LoRAs across loaded images
+    const modelCounts = new Map();
+    const loraCounts = new Map();
+    let noLoraCount = 0;
+
+    state.images.forEach(img => {
+        if (img.data) {
+            if (img.data.model && img.data.model !== 'Unknown') {
+                const mKey = img.data.model.toLowerCase();
+                modelCounts.set(mKey, (modelCounts.get(mKey) || 0) + 1);
+            }
+            if (Array.isArray(img.data.loras)) {
+                if (img.data.loras.length === 0) {
+                    noLoraCount++;
+                } else {
+                    img.data.loras.forEach(l => {
+                        const lName = typeof l === 'string' ? l : l?.name;
+                        if (lName) {
+                            const lKey = lName.toLowerCase();
+                            loraCounts.set(lKey, (loraCounts.get(lKey) || 0) + 1);
+                        }
+                    });
+                }
+            }
+        }
+    });
+
     // Models (case-insensitive alphabetical sort)
     els.modelFilter.innerHTML = '<option value="">All Models</option>';
     const models = Array.from(state.models).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     
     models.forEach(model => {
+        const count = modelCounts.get(model.toLowerCase()) || 0;
         const option = document.createElement('option');
         option.value = model;
-        option.textContent = normalizeName(model);
+        option.textContent = `${normalizeName(model)} (${count})`;
         els.modelFilter.appendChild(option);
     });
     
@@ -1454,13 +1482,14 @@ function updateFiltersUI() {
     // Add "No LoRA" option
     const noLoraOption = document.createElement('option');
     noLoraOption.value = '__no_lora__';
-    noLoraOption.textContent = 'No LoRA';
+    noLoraOption.textContent = `No LoRA (${noLoraCount})`;
     els.loraFilter.appendChild(noLoraOption);
 
     loras.forEach(lora => {
+        const count = loraCounts.get(lora.toLowerCase()) || 0;
         const option = document.createElement('option');
         option.value = lora;
-        option.textContent = normalizeName(lora);
+        option.textContent = `${normalizeName(lora)} (${count})`;
         els.loraFilter.appendChild(option);
     });
     
