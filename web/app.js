@@ -354,8 +354,75 @@ const normalizeName = (name, keepAll = false) => {
 };
 
 /**
+ * Splits the parameter section by top-level commas, respecting quotes and JSON structures.
+ */
+function splitParamsSection(paramsText) {
+    const parts = [];
+    let current = '';
+    let inQuote = false;
+    let quoteChar = '';
+    let braceDepth = 0;
+    let bracketDepth = 0;
+    let isEscaped = false;
+
+    for (let i = 0; i < paramsText.length; i++) {
+        const ch = paramsText[i];
+        
+        if (isEscaped) {
+            current += ch;
+            isEscaped = false;
+            continue;
+        }
+
+        if (ch === '\\') {
+            current += ch;
+            isEscaped = true;
+            continue;
+        }
+
+        if (inQuote) {
+            if (ch === quoteChar) {
+                inQuote = false;
+            }
+            current += ch;
+        } else {
+            if (ch === '"' || ch === "'") {
+                inQuote = true;
+                quoteChar = ch;
+                current += ch;
+            } else if (ch === '{') {
+                braceDepth++;
+                current += ch;
+            } else if (ch === '}') {
+                if (braceDepth > 0) braceDepth--;
+                current += ch;
+            } else if (ch === '[') {
+                bracketDepth++;
+                current += ch;
+            } else if (ch === ']') {
+                if (bracketDepth > 0) bracketDepth--;
+                current += ch;
+            } else if (ch === ',' && braceDepth === 0 && bracketDepth === 0) {
+                if (current.trim()) {
+                    parts.push(current.trim());
+                }
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+    }
+
+    if (current.trim()) {
+        parts.push(current.trim());
+    }
+
+    return parts;
+}
+
+/**
  * Parses the standard A1111-style multi-line metadata format
- * used by LoRA Manager and other SD tools.
+ * used by LoRA Manager, Civitai, and other SD/ComfyUI tools.
  */
 function parseStandardMetadata(text) {
     if (!text || typeof text !== 'string') return null;
@@ -369,6 +436,7 @@ function parseStandardMetadata(text) {
         steps: null,
         sampler: null,
         cfg: null,
+        scheduler: null,
         size: null,
         raw: text
     };
@@ -381,20 +449,27 @@ function parseStandardMetadata(text) {
     // Negative prompt: [Negative Prompt]
     // Steps: 20, Sampler: Euler, ... Model: model_name, ...
     
-    let lastPart = lines[lines.length - 1];
+    let paramsIdx = lines.findIndex(l => l.startsWith('Steps:') || (l.includes('Steps:') && (l.includes('Sampler:') || l.includes('Seed:'))));
     let paramsSection = '';
     let negativeSection = '';
     let positiveLines = [];
 
-    // Check if the last line contains key parameters
-    if (lastPart.includes('Steps:') || lastPart.includes('Seed:')) {
-        paramsSection = lines.pop();
+    if (paramsIdx !== -1) {
+        paramsSection = lines.slice(paramsIdx).join(' ');
+        lines.splice(paramsIdx);
+    } else {
+        const lastPart = lines[lines.length - 1];
+        if (lastPart.includes('Steps:') || lastPart.includes('Seed:')) {
+            paramsSection = lines.pop();
+        }
     }
 
     // Identify Negative Prompt line
     const negIdx = lines.findIndex(l => l.startsWith('Negative prompt:'));
     if (negIdx !== -1) {
         negativeSection = lines[negIdx].replace('Negative prompt:', '').trim();
+        const remainingNeg = lines.slice(negIdx + 1).join('\n');
+        if (remainingNeg) negativeSection += '\n' + remainingNeg;
         positiveLines = lines.slice(0, negIdx);
     } else {
         positiveLines = lines;
@@ -403,12 +478,17 @@ function parseStandardMetadata(text) {
     result.positivePrompt = positiveLines.join('\n');
     result.negativePrompt = negativeSection;
 
-    // Parse Parameters (comma separated k: v pairs)
+    const paramLoras = [];
+    const civitaiLoraWeights = [];
+
+    // Parse Parameters (comma separated k: v pairs, safely split)
     if (paramsSection) {
-        const parts = paramsSection.split(',').map(p => p.trim());
+        const parts = splitParamsSection(paramsSection);
         parts.forEach(part => {
-            const [key, ...valParts] = part.split(':').map(v => v.trim());
-            const val = valParts.join(':');
+            const colonIdx = part.indexOf(':');
+            if (colonIdx === -1) return;
+            const key = part.slice(0, colonIdx).trim();
+            const val = part.slice(colonIdx + 1).trim();
             
             if (key === 'Model') {
                 result.model = normalizeName(val, true);
@@ -418,7 +498,7 @@ function parseStandardMetadata(text) {
                 result.steps = val;
             } else if (key === 'Sampler') {
                 result.sampler = val;
-            } else if (key === 'CFG scale') {
+            } else if (key === 'CFG scale' || key === 'CFG') {
                 result.cfg = val;
             } else if (key === 'Scheduler') {
                 result.scheduler = val;
@@ -426,39 +506,86 @@ function parseStandardMetadata(text) {
                 result.size = val;
             } else if (key === 'Lora hashes') {
                 // Example: Lora hashes: "lora1: abc, lora2: def"
-                const loraNames = val.match(/"([^"]+)"/);
-                if (loraNames) {
-                    loraNames[1].split(',').forEach(l => {
-                        const lName = l.split(':')[0].trim();
-                        if (lName) result.loras.push({ name: normalizeName(lName), weight: 1.0 });
-                    });
+                const rawStr = val.startsWith('"') && val.endsWith('"') ? val.slice(1, -1) : val;
+                rawStr.split(',').forEach(l => {
+                    const lName = l.split(':')[0].trim();
+                    if (lName) paramLoras.push({ name: normalizeName(lName), weight: 1.0 });
+                });
+            } else if (key === 'Hashes') {
+                // Example: Hashes: {"model":"68248DA661","LORA:subdom_slider":"08275A0D46", ...}
+                try {
+                    const hashesObj = JSON.parse(val);
+                    for (const [hKey, hVal] of Object.entries(hashesObj)) {
+                        const lowerHKey = hKey.toLowerCase();
+                        if (lowerHKey.startsWith('lora:') || lowerHKey.startsWith('lyco:')) {
+                            const lName = hKey.slice(hKey.indexOf(':') + 1).trim();
+                            if (lName) {
+                                paramLoras.push({ name: normalizeName(lName), weight: 1.0 });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    const loraMatches = val.matchAll(/"(?:LORA|lora|lyco):([^"]+)":\s*"([^"]+)"/gi);
+                    for (const match of loraMatches) {
+                        if (match[1]) {
+                            paramLoras.push({ name: normalizeName(match[1]), weight: 1.0 });
+                        }
+                    }
                 }
+            } else if (key === 'Civitai resources') {
+                // Example: Civitai resources: [{"air":"urn:air:...:lora:...","weight":1.0}, ...]
+                try {
+                    const resources = JSON.parse(val);
+                    if (Array.isArray(resources)) {
+                        resources.forEach(res => {
+                            const isLora = (res.air && res.air.toLowerCase().includes(':lora:')) || 
+                                           (res.type && res.type.toLowerCase() === 'lora');
+                            if (isLora) {
+                                const weight = res.weight !== undefined ? parseFloat(res.weight) : 1.0;
+                                civitaiLoraWeights.push(isNaN(weight) ? 1.0 : weight);
+                                if (res.modelName || res.name) {
+                                    const lName = res.modelName || res.name;
+                                    paramLoras.push({ name: normalizeName(lName), weight: isNaN(weight) ? 1.0 : weight });
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {}
             }
         });
     }
 
-    // Extract LoRAs from prompt if they are in <lora:name:strength> format
-    const loraMatches = result.positivePrompt.match(/<lora:([^:]+):([^>]+)>/g);
-    if (loraMatches) {
-        loraMatches.forEach(m => {
-            const match = m.match(/<lora:([^:]+):([^>]+)>/);
-            const name = match[1];
-            const weight = parseFloat(match[2]);
-            if (name) {
-                result.loras.push({ 
-                    name: normalizeName(name), 
-                    weight: isNaN(weight) ? 1.0 : weight 
-                });
+    // Apply Civitai resource weights to paramLoras if present
+    if (civitaiLoraWeights.length > 0) {
+        paramLoras.forEach((lora, idx) => {
+            if (idx < civitaiLoraWeights.length && lora.weight === 1.0) {
+                lora.weight = civitaiLoraWeights[idx];
             }
         });
     }
+
+    // Extract LoRAs from prompt if they are in <lora:name:strength> or <lyco:name:strength> format
+    const promptLoras = [];
+    const promptLoraMatches = result.positivePrompt.matchAll(/<(?:lora|lyco):([^:>]+)(?::([^:>]+))?(?::([^:>]+))?>/gi);
+    for (const match of promptLoraMatches) {
+        const name = match[1]?.trim();
+        const weight = match[2] !== undefined ? parseFloat(match[2]) : 1.0;
+        if (name) {
+            promptLoras.push({ 
+                name: normalizeName(name), 
+                weight: isNaN(weight) ? 1.0 : weight 
+            });
+        }
+    }
     
-    // Deduplicate LoRAs by name, keeping the first one found (usually the one from the prompt has the weight)
+    // Deduplicate LoRAs by case-insensitive name (prompt LoRAs take precedence for explicit weights)
+    const allLoras = [...promptLoras, ...paramLoras];
     const uniqueLoras = [];
     const seenNames = new Set();
-    for (const lora of result.loras) {
-        if (!seenNames.has(lora.name)) {
-            seenNames.add(lora.name);
+    for (const lora of allLoras) {
+        const lowerName = lora.name.toLowerCase();
+        if (!seenNames.has(lowerName)) {
+            seenNames.add(lowerName);
             uniqueLoras.push(lora);
         }
     }
@@ -1030,7 +1157,18 @@ async function parsePNG(file) {
                                     promptMetadata.model = a1111Name;
                                 }
                             } else if (key === 'loras') {
-                                if (promptMetadata.loras.length === 0) promptMetadata.loras = value;
+                                if (promptMetadata.loras.length === 0) {
+                                    promptMetadata.loras = value;
+                                } else if (Array.isArray(value) && value.length > 0) {
+                                    const existing = new Set(promptMetadata.loras.map(l => (typeof l === 'string' ? l : l.name).toLowerCase()));
+                                    value.forEach(l => {
+                                        const lName = typeof l === 'string' ? l : l.name;
+                                        if (!existing.has(lName.toLowerCase())) {
+                                            promptMetadata.loras.push(l);
+                                            existing.add(lName.toLowerCase());
+                                        }
+                                    });
+                                }
                             } else {
                                 promptMetadata[key] = value;
                             }
