@@ -893,9 +893,11 @@ function finalizeMetadata(defaultData, promptMetadata, workflowMetadata, rawJson
     
     const getBest = (key, defaultVal) => {
         // If we have a priority result (e.g. from 'parameters' chunk), trust it globally
-        if (promptMetadata && promptMetadata.priorityResult && promptMetadata[key]) {
-            if (key === 'loras' && promptMetadata[key].length > 0) return promptMetadata[key];
-            if (key !== 'loras' && promptMetadata[key] !== defaultVal) return promptMetadata[key];
+        if (promptMetadata && promptMetadata.priorityResult) {
+            if (key === 'loras' && Array.isArray(promptMetadata.loras)) return promptMetadata.loras;
+            if (promptMetadata[key] !== undefined && promptMetadata[key] !== null && promptMetadata[key] !== defaultVal) {
+                return promptMetadata[key];
+            }
         }
 
         let vP = promptMetadata ? promptMetadata[key] : null;
@@ -1157,18 +1159,7 @@ async function parsePNG(file) {
                                     promptMetadata.model = a1111Name;
                                 }
                             } else if (key === 'loras') {
-                                if (promptMetadata.loras.length === 0) {
-                                    promptMetadata.loras = value;
-                                } else if (Array.isArray(value) && value.length > 0) {
-                                    const existing = new Set(promptMetadata.loras.map(l => (typeof l === 'string' ? l : l.name).toLowerCase()));
-                                    value.forEach(l => {
-                                        const lName = typeof l === 'string' ? l : l.name;
-                                        if (!existing.has(lName.toLowerCase())) {
-                                            promptMetadata.loras.push(l);
-                                            existing.add(lName.toLowerCase());
-                                        }
-                                    });
-                                }
+                                promptMetadata.loras = value;
                             } else {
                                 promptMetadata[key] = value;
                             }
